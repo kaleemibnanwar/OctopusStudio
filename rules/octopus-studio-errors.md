@@ -1,0 +1,51 @@
+# OctopusStudioError and telemetry
+
+Use `OctopusStudioError` from `src/errors/octopus-studio_error.ts` when throwing from **main process / IPC handlers** (or code only called from there) for failures that are **not product bugs**: validation, missing entities, auth/setup prerequisites, user refusal, conflicts, rate limits, etc.
+
+## API
+
+- **`OctopusStudioErrorKind`** — enum classifying the failure.
+- **`new OctopusStudioError(message, kind)`** — `error.name` is `"OctopusStudioError"`; use `error.kind` for branching.
+- **`isOctopusStudioError(error)`** — type guard.
+
+## Telemetry (PostHog `$exception`)
+
+`sendTelemetryException` in `src/ipc/utils/telemetry.ts` calls `shouldFilterTelemetryException`, which **does not send** exceptions for:
+
+| Kind            | Use for                                                                             |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `Validation`    | Invalid input, limits, malformed URLs, Zod-style client mistakes surfaced as errors |
+| `NotFound`      | App/chat/plan/file missing, stale IDs                                               |
+| `Auth`          | Not signed in, missing token, GitHub not linked                                     |
+| `Precondition`  | Wrong state for the operation (e.g. feature not installed, sandbox/path rules)      |
+| `Conflict`      | Duplicates, git working-tree conflicts, push rejected — user/environment fixable    |
+| `UserCancelled` | User declined a tool or similar explicit refusal                                    |
+| `RateLimited`   | Quota / 429-style limits (also see legacy `RateLimitError` handling)                |
+
+**Always sent** (actionable or unknown): `External`, `Internal`, `Unknown`.
+
+Prefer **`OctopusStudioError`** over growing `FILTERED_EXCEPTION_MESSAGES` in `telemetry.ts` when the failure is stable and classified.
+
+## Non-Pro event sampling (renderer)
+
+The renderer PostHog `before_send` (in `src/renderer.tsx`) drops ~90% of events for **non-Pro** users. Any event whose audience is primarily free users (conversion funnels like `promo_click`, upgrade CTAs) must be added to `shouldBypassNonProTelemetrySampling` in `src/lib/posthogTelemetry.ts`, or it will be silently undercounted 10x. Errors, `app:initial-load`, and `sandbox.script.*` already bypass sampling.
+
+## IPC handlers
+
+- **`createTypedHandler` / `createLoggedTypedHandler`** rethrow the original error after telemetry — `OctopusStudioError` is preserved.
+- **`createLoggedHandler` (`safe_handle.ts`)** rethrows `OctopusStudioError` unchanged so the renderer keeps `instanceof OctopusStudioError`.
+- In broad `catch` blocks that convert unknown failures to `OctopusStudioError`, first rethrow existing `OctopusStudioError` instances. Otherwise an already-classified error (for example `Precondition` or `External`) can be wrapped as the wrong kind and change telemetry filtering.
+- When changing a main-process utility from swallowing/logging failures to throwing `OctopusStudioError`, audit non-IPC callers such as `app.whenReady()` startup, deep-link handlers, and consent callbacks. These are outside typed handler boundaries, so wrap best-effort writes or surface an explicit dialog instead of letting an unhandled rejection block `createWindow()` or send a success event.
+
+## Migration
+
+Most IPC/main paths and shared utilities (`git_utils`, Supabase admin, local agent tools, etc.) now use **`OctopusStudioError`** with an appropriate kind. Remaining `throw new Error(...)` are usually **dynamic** messages (`throw new Error(err.message || …)`), **multi-line** throws, or **renderer** code where telemetry filtering is less critical.
+
+**Do not** import `OctopusStudioError` inside preload (`src/preload.ts`) without verifying the preload bundle; preload continues to use plain `Error` for invalid channels.
+
+**Legacy:** `FILTERED_EXCEPTION_MESSAGES`, `RateLimitError` (429) handling in `telemetry.ts`, and bare `TypeError: fetch failed` (via `isGenericFetchFailedError` in `posthogTelemetry.ts`) remain for plain `Error` paths not yet migrated. Renderer PostHog `before_send` uses `shouldFilterPostHogExceptionEvent` for the same fetch noise from autocapture.
+
+## Automation pitfalls
+
+- When auto-inserting `import { OctopusStudioError, OctopusStudioErrorKind } from "@/errors/octopus-studio_error"`, **never** place it inside another `import { ... }` block — it must be its own import statement or TypeScript fails with “Identifier expected” at the next line.
+- Automated line-based migrations must **not** match strings inside **test fixtures** (e.g. template literals that embed sample source code); that can inject imports into fake file content.

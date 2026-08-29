@@ -1,0 +1,3 @@
++ "acceptedCommunityCode": true
+- "selectedTemplateId": "react"
++ "selectedTemplateId": "jeff-kazzee/octopus-studio-template-angular"

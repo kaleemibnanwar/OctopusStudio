@@ -1,0 +1,7 @@
+- button "Restore to this point"
+- paragraph: "[dump]"
+- 'button "Expand image: logo.png"'
+- paragraph: "[[octopus-studio-dump-path=*]]"
+- button "Copy"
+- button "Undo"
+- button "Retry"

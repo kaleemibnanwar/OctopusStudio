@@ -1,0 +1,447 @@
+import { db } from "../../db";
+import { ensureDefaultChatProject } from "../../db/default_chat_project";
+import { chats, messages } from "../../db/schema";
+import { desc, eq, and, like, inArray, sql } from "drizzle-orm";
+import type { ChatSearchResult, ChatSummary } from "../../lib/schemas";
+
+import log from "electron-log";
+import {
+  OctopusStudioError,
+  OctopusStudioErrorKind,
+} from "@/errors/octopus_studio_error";
+import { createTypedHandler } from "./base";
+import { entityDisposalBus } from "@/window_infrastructure/main/entity_disposal_bus";
+import { chatContracts } from "../types/chat";
+import { normalizeStoredChatMode } from "./chat_mode_resolution";
+import {
+  blockNewStreamsForChat,
+  cancelActiveStreamsForChat,
+} from "./chat_stream_handlers";
+import type { WebContents } from "electron";
+import {
+  rendererMessageColumns,
+  toRendererMessage,
+} from "../utils/renderer_chat_message";
+import { createChatForApp } from "../utils/chat_creation_utils";
+import {
+  getReferencedAppsForDisplay,
+  readStoredReferencedAppIds,
+} from "../utils/mention_apps";
+import { firstPromptCreationRegistry } from "../services/first_prompt_creation_service";
+import { userInputRegistry } from "@/user_input/main";
+import {
+  beginChatActorMutation,
+  settleChatActorsForDeletion,
+} from "@/ipc/services/chat_actor_deletion_service";
+import { waitForChatActorIdle } from "@/ipc/services/chat_actor_service";
+import { appOperationCoordinator } from "@/ipc/services/app_operation_coordinator";
+import { withChatQueueLock } from "@/chat_stream/queue_lock";
+
+const logger = log.scope("chat_handlers");
+
+async function mutateChatAfterDrainingStreams({
+  chatId,
+  sender,
+  beforeLock,
+  mutation,
+}: {
+  chatId: number;
+  sender: WebContents;
+  beforeLock?: () => Promise<void>;
+  mutation: () => Promise<void>;
+}): Promise<void> {
+  const releaseActorAdmissionBlock = beginChatActorMutation(chatId);
+  try {
+    const chat = await db.query.chats.findFirst({
+      columns: { appId: true },
+      where: eq(chats.id, chatId),
+    });
+    if (!chat) {
+      return;
+    }
+
+    const releaseStreamAdmissionBlock = blockNewStreamsForChat(chatId);
+    try {
+      await beforeLock?.();
+      // Drain outside the app lock: an aborted stream may need the same lock to
+      // finish a file write. The admission blocks close the gaps before and
+      // after draining so another turn cannot enter around the mutation.
+      await waitForChatActorIdle(chatId, { cancelActive: true });
+      await cancelActiveStreamsForChat(chatId, sender);
+      await appOperationCoordinator.run(
+        {
+          appId: chat.appId,
+          operation: "mutate-chat-content",
+          resources: ["chat-content"],
+        },
+        mutation,
+      );
+    } finally {
+      releaseStreamAdmissionBlock();
+    }
+  } finally {
+    releaseActorAdmissionBlock();
+  }
+}
+
+export function registerChatHandlers() {
+  createTypedHandler(chatContracts.createChat, async (event, input) => {
+    const { appId, initialChatMode, firstPromptCreationOperationId } =
+      typeof input === "number"
+        ? {
+            appId: input,
+            initialChatMode: undefined,
+            firstPromptCreationOperationId: undefined,
+          }
+        : input;
+
+    if (firstPromptCreationOperationId) {
+      firstPromptCreationRegistry.track(
+        firstPromptCreationOperationId,
+        event.sender,
+      );
+    }
+    let chatId: number | undefined;
+    try {
+      chatId = await createChatForApp({ appId, initialChatMode });
+      return chatId;
+    } finally {
+      if (firstPromptCreationOperationId) {
+        if (chatId === undefined) {
+          firstPromptCreationRegistry.commit(firstPromptCreationOperationId);
+        } else {
+          const createdChatId = chatId;
+          await firstPromptCreationRegistry.complete(
+            firstPromptCreationOperationId,
+            async () => {
+              await db.delete(chats).where(eq(chats.id, createdChatId));
+            },
+          );
+        }
+      }
+    }
+  });
+
+  createTypedHandler(chatContracts.createChatInDefaultProject, async () => {
+    const project = await ensureDefaultChatProject();
+    const chatId = await createChatForApp({
+      appId: project.id,
+      // Chat projects run the local agent (with code-only tools gated out).
+      initialChatMode: "local-agent",
+    });
+    return { chatId, appId: project.id };
+  });
+
+  createTypedHandler(chatContracts.getChat, async (_, chatId) => {
+    const chat = await db.query.chats.findFirst({
+      where: eq(chats.id, chatId),
+      columns: {
+        id: true,
+        appId: true,
+        title: true,
+        initialCommitHash: true,
+        chatMode: true,
+        modelSelection: true,
+        referencedAppIds: true,
+      },
+      with: {
+        app: {
+          columns: { type: true },
+        },
+        messages: {
+          columns: rendererMessageColumns,
+          orderBy: (messages, { asc }) => [
+            asc(messages.createdAt),
+            asc(messages.id),
+          ],
+        },
+      },
+    });
+
+    if (!chat) {
+      throw new OctopusStudioError(
+        "Chat not found",
+        OctopusStudioErrorKind.NotFound,
+      );
+    }
+
+    return {
+      id: chat.id,
+      appId: chat.appId,
+      appType: chat.app?.type,
+      title: chat.title ?? "",
+      initialCommitHash: chat.initialCommitHash,
+      chatMode: normalizeStoredChatMode(chat.chatMode),
+      modelSelection: chat.modelSelection ?? null,
+      referencedApps: await getReferencedAppsForDisplay(chat.referencedAppIds),
+      messages: chat.messages.map(toRendererMessage),
+    };
+  });
+
+  createTypedHandler(
+    chatContracts.removeChatReferencedApp,
+    async (event, { chatId, appId }) => {
+      const chat = await db.query.chats.findFirst({
+        where: eq(chats.id, chatId),
+        columns: { id: true },
+      });
+
+      if (!chat) {
+        throw new OctopusStudioError(
+          "Chat not found",
+          OctopusStudioErrorKind.NotFound,
+        );
+      }
+
+      // Detaching revokes read access, so it has to reach the turn that is
+      // already running: an in-flight agent resolved this chat's references
+      // into its tool context up front and would keep reading the app until
+      // the turn ended. Draining cancels that turn and blocks new ones until
+      // the write lands, which also stops the stream's whole-array union
+      // (computed before the removal) from putting the id back.
+      await mutateChatAfterDrainingStreams({
+        chatId,
+        sender: event.sender,
+        mutation: async () => {
+          // Re-read inside the mutation: the drained stream may have persisted
+          // its own union on the way out.
+          const drainedChat = await db.query.chats.findFirst({
+            where: eq(chats.id, chatId),
+            columns: { referencedAppIds: true },
+          });
+          if (!drainedChat) {
+            return;
+          }
+
+          const remaining = readStoredReferencedAppIds(
+            drainedChat.referencedAppIds,
+          ).filter((id) => id !== appId);
+
+          await db
+            .update(chats)
+            .set({ referencedAppIds: remaining })
+            .where(eq(chats.id, chatId));
+        },
+      });
+    },
+  );
+
+  createTypedHandler(chatContracts.getChatMetadata, async (_, chatId) => {
+    const chat = await db.query.chats.findFirst({
+      where: eq(chats.id, chatId),
+      columns: {
+        id: true,
+        appId: true,
+        title: true,
+        createdAt: true,
+        chatMode: true,
+        isFavorite: true,
+      },
+    });
+
+    if (!chat) {
+      throw new OctopusStudioError(
+        "Chat not found",
+        OctopusStudioErrorKind.NotFound,
+      );
+    }
+
+    return {
+      id: chat.id,
+      appId: chat.appId,
+      title: chat.title,
+      createdAt: chat.createdAt,
+      chatMode: normalizeStoredChatMode(chat.chatMode),
+      isFavorite: chat.isFavorite,
+    };
+  });
+
+  createTypedHandler(chatContracts.getChats, async (_, appId) => {
+    // If appId is provided, filter chats for that app
+    const query = appId
+      ? db.query.chats.findMany({
+          where: eq(chats.appId, appId),
+          columns: {
+            id: true,
+            title: true,
+            createdAt: true,
+            appId: true,
+            chatMode: true,
+            isFavorite: true,
+          },
+          orderBy: [desc(chats.createdAt)],
+        })
+      : db.query.chats.findMany({
+          columns: {
+            id: true,
+            title: true,
+            createdAt: true,
+            appId: true,
+            chatMode: true,
+            isFavorite: true,
+          },
+          orderBy: [desc(chats.createdAt)],
+        });
+
+    const allChats = await query;
+
+    const tokenTotals = new Map<number, number>();
+    if (allChats.length > 0) {
+      const rows = await db
+        .select({
+          chatId: messages.chatId,
+          total: sql<number>`coalesce(sum(${messages.maxTokensUsed}), 0)`,
+        })
+        .from(messages)
+        .where(
+          inArray(
+            messages.chatId,
+            allChats.map((chat) => chat.id),
+          ),
+        )
+        .groupBy(messages.chatId);
+      for (const row of rows) {
+        tokenTotals.set(row.chatId, Number(row.total));
+      }
+    }
+
+    return allChats.map((chat) => ({
+      ...chat,
+      chatMode: normalizeStoredChatMode(chat.chatMode),
+      totalTokens: tokenTotals.get(chat.id) ?? 0,
+    })) satisfies ChatSummary[];
+  });
+
+  createTypedHandler(chatContracts.deleteChat, async (event, chatId) => {
+    await mutateChatAfterDrainingStreams({
+      chatId,
+      sender: event.sender,
+      beforeLock: async () => {
+        await userInputRegistry.settleChat(chatId);
+        await settleChatActorsForDeletion(chatId);
+      },
+      mutation: async () => {
+        await db.delete(chats).where(eq(chats.id, chatId));
+        entityDisposalBus.publish({ kind: "chat", id: chatId });
+      },
+    });
+  });
+
+  createTypedHandler(chatContracts.updateChat, async (_, params) => {
+    const { chatId, title, chatMode, modelSelection } = params;
+    const updates: Partial<typeof chats.$inferInsert> = {};
+    if (title !== undefined) {
+      updates.title = title;
+    }
+    if (chatMode !== undefined) {
+      updates.chatMode = chatMode;
+    }
+    if (modelSelection !== undefined) {
+      updates.modelSelection = modelSelection;
+    }
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+    if (modelSelection !== undefined) {
+      await withChatQueueLock(chatId, () =>
+        db.update(chats).set(updates).where(eq(chats.id, chatId)),
+      );
+    } else {
+      await db.update(chats).set(updates).where(eq(chats.id, chatId));
+    }
+  });
+
+  createTypedHandler(chatContracts.setChatFavorite, async (_, params) => {
+    const updated = await db
+      .update(chats)
+      .set({ isFavorite: params.isFavorite })
+      .where(eq(chats.id, params.chatId))
+      .returning({ isFavorite: chats.isFavorite });
+
+    if (updated.length === 0) {
+      throw new OctopusStudioError(
+        "Chat not found",
+        OctopusStudioErrorKind.NotFound,
+      );
+    }
+
+    return updated[0];
+  });
+
+  createTypedHandler(chatContracts.deleteMessages, async (event, chatId) => {
+    await mutateChatAfterDrainingStreams({
+      chatId,
+      sender: event.sender,
+      mutation: async () => {
+        // Clearing the conversation clears its referenced apps too: the
+        // mentions that established them are gone, so keeping the agent's
+        // read access to other apps would outlive anything the user can see.
+        // Both writes commit together — a failure or exit between them would
+        // leave sticky cross-app read access behind an empty history, where
+        // nothing on screen explains why the agent can still read that app.
+        db.transaction((tx) => {
+          tx.delete(messages).where(eq(messages.chatId, chatId)).run();
+          tx.update(chats)
+            .set({ referencedAppIds: [] })
+            .where(eq(chats.id, chatId))
+            .run();
+        });
+      },
+    });
+  });
+
+  createTypedHandler(chatContracts.searchChats, async (_, params) => {
+    const { appId, query } = params;
+    // 1) Find chats by title and map to ChatSearchResult with no matched message
+    const chatTitleMatches = await db
+      .select({
+        id: chats.id,
+        appId: chats.appId,
+        title: chats.title,
+        createdAt: chats.createdAt,
+      })
+      .from(chats)
+      .where(and(eq(chats.appId, appId), like(chats.title, `%${query}%`)))
+      .orderBy(desc(chats.createdAt))
+      .limit(10);
+
+    const titleResults: ChatSearchResult[] = chatTitleMatches.map((c) => ({
+      id: c.id,
+      appId: c.appId,
+      title: c.title,
+      createdAt: c.createdAt,
+      matchedMessageContent: null,
+    }));
+
+    // 2) Find messages that match and join to chats to build one result per message
+    const messageResults = await db
+      .select({
+        id: chats.id,
+        appId: chats.appId,
+        title: chats.title,
+        createdAt: chats.createdAt,
+        matchedMessageContent: messages.content,
+      })
+      .from(messages)
+      .innerJoin(chats, eq(messages.chatId, chats.id))
+      .where(and(eq(chats.appId, appId), like(messages.content, `%${query}%`)))
+      .orderBy(desc(chats.createdAt))
+      .limit(10);
+
+    // Combine: keep title matches and per-message matches
+    const combined: ChatSearchResult[] = [...titleResults, ...messageResults];
+    const uniqueChats = Array.from(
+      new Map(combined.map((item) => [item.id, item])).values(),
+    );
+
+    // Sort newest chats first
+    uniqueChats.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    return uniqueChats;
+  });
+
+  logger.debug("Registered chat IPC handlers");
+}

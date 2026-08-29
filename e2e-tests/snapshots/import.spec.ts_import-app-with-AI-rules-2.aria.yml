@@ -1,0 +1,6 @@
+- button "Restore to this point"
+- paragraph: "[dump]"
+- paragraph: "[[octopus-studio-dump-path=*]]"
+- button "Copy"
+- button "Undo"
+- button "Retry"

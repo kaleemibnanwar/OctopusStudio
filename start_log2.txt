@@ -1,0 +1,42 @@
+
+> octopus-studio@1.10.0 start
+> node scripts/start-supervisor.mjs
+
+❯ Checking your system
+❯ Checking package manager version
+✔ Found npm@11.16.0
+✔ Checking your system
+[?25h❯ Locating application
+✔ Locating application
+❯ Loading configuration
+AZURE_CODE_SIGNING_DLIB undefined
+✔ Loading configuration
+❯ Preparing native dependencies
+✔ Preparing native dependencies: 2 / 2
+❯ Running generateAssets hook
+✔ Running generateAssets hook
+❯ Running preStart hook
+❯ [plugin-vite] Preparing Vite bundles
+❯ Launching Vite dev servers for renderer process code...
+❯ Target main_window
+Port 5173 is in use, trying another one...
+›   ➜  Local:   http://localhost:5174/  
+› ➜  Network: use --host to expose
+✔ Target main_window
+✔ Launched Vite dev servers for renderer process code
+❯ Building main process and preload bundles...
+❯ Building src/main.ts target
+❯ Building src/preload.ts target
+❯ Building /home/kalim/dyad/workers/code_explorer/code_explorer_worker.ts target
+❯ Building /home/kalim/dyad/workers/supabase_dependency_analysis/supabase_dependency_analysis_worker.ts target
+❯ Building /home/kalim/dyad/src/ipc/utils/sandbox/sandbox_worker.ts target
+
+An unhandled rejection has occurred inside Forge:
+Error: ENOSPC: System limit for number of file watchers reached, watch '/home/kalim/dyad/userData/Cache/Cache_Data/cb5cf4a927a81130_0'
+at FSWatcher.<computed> (node:internal/fs/watchers:321:19)
+    at Object.watch (node:fs:2548:36)
+    at createFsWatchInstance (file:///home/kalim/dyad/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:42780:17)
+    at setFsWatchListener (file:///home/kalim/dyad/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:42827:15)
+    at NodeFsHandler._watchWithNodeFs (file:///home/kalim/dyad/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:42982:14)
+    at NodeFsHandler._handleFile (file:///home/kalim/dyad/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:43046:23)
+    at NodeFsHandler._addToNodeFs (file:///home/kalim/dyad/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:43288:21)

@@ -1,0 +1,8 @@
+- button "Restore to this point"
+- paragraph: "[dump] tc=turbo-edits"
+- paragraph: "[[octopus-studio-dump-path=*]]"
+- button "Copy"
+- text: auto
+- button "Copy Request ID"
+- button "Undo"
+- button "Retry"

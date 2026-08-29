@@ -1,0 +1,596 @@
+export const SECTION_IDS = {
+  general: "general-settings",
+  workflow: "workflow-settings",
+  ai: "ai-settings",
+  providers: "provider-settings",
+  telemetry: "telemetry",
+  integrations: "integrations",
+  agentPermissions: "agent-permissions",
+  advanced: "advanced",
+  experiments: "experiments",
+  dangerZone: "danger-zone",
+} as const;
+
+export const SETTING_IDS = {
+  theme: "setting-theme",
+  zoom: "setting-zoom",
+  autoUpdate: "setting-auto-update",
+  releaseChannel: "setting-release-channel",
+  runtimeMode: "setting-runtime-mode",
+  nodeRuntime: "setting-node-runtime",
+  nodePath: "setting-node-path",
+  customAppsFolder: "setting-custom-apps-folder",
+  defaultChatMode: "setting-default-chat-mode",
+  autoApprove: "setting-auto-approve",
+  autoExpandPreview: "setting-auto-expand-preview",
+  keepPreviewsRunning: "setting-keep-previews-running",
+  appBlueprint: "setting-app-blueprint",
+  testingForNewApps: "setting-testing-for-new-apps",
+  chatEventNotification: "setting-chat-event-notification",
+  defaultModel: "setting-default-model",
+  maxChatTurns: "setting-max-chat-turns",
+  maxToolCallSteps: "setting-max-tool-call-steps",
+  contextCompaction: "setting-context-compaction",
+  telemetry: "setting-telemetry",
+  github: "setting-github",
+  vercel: "setting-vercel",
+  supabase: "setting-supabase",
+  neon: "setting-neon",
+  imageSearch: "setting-image-search",
+  enableCloudSandbox: "setting-enable-cloud-sandbox",
+  autoApproveNonSchemaSql: "setting-auto-approve-non-schema-sql",
+  autoApproveSafeMcpTools: "setting-auto-approve-safe-mcp-tools",
+  enableSandboxScriptExecution: "setting-enable-sandbox-script-execution",
+  blockUnsafeNpmPackages: "setting-block-unsafe-npm-packages",
+  enablePnpmMinimumReleaseAgeWarning:
+    "setting-enable-pnpm-minimum-release-age-warning",
+  enableMcpToolSearch: "setting-enable-mcp-tool-search",
+  enableCodeExplorer: "setting-enable-code-explorer",
+  enableMultiWindow: "setting-enable-multi-window",
+  enableSelectAppFromHomeChatInput:
+    "setting-enable-select-app-from-home-chat-input",
+  reset: "setting-reset",
+} as const;
+
+type SearchableSettingItem = {
+  id: string;
+  label: string;
+  description: string;
+  keywords: string[];
+  sectionId: string;
+  sectionLabel: string;
+};
+
+export const SETTINGS_SEARCH_INDEX: SearchableSettingItem[] = [
+  // General Settings
+  {
+    id: SETTING_IDS.theme,
+    label: "Theme",
+    description: "Switch between system, light, and dark mode",
+    keywords: ["dark mode", "light mode", "appearance", "color", "system"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.zoom,
+    label: "Zoom Level",
+    description: "Adjust the zoom level to make content easier to read",
+    keywords: ["font size", "magnify", "scale", "accessibility", "zoom"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.autoUpdate,
+    label: "Auto Update",
+    description: "Automatically update the app when new versions are available",
+    keywords: ["update", "automatic", "version", "upgrade"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.releaseChannel,
+    label: "Release Channel",
+    description: "Choose between stable and beta release channels",
+    keywords: ["stable", "beta", "channel", "release", "version"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.runtimeMode,
+    label: "Runtime Mode",
+    description: "Configure Node runtime settings",
+    keywords: ["node", "runtime", "bun", "environment"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.nodePath,
+    label: "Node Path",
+    description: "Set a custom Node.js installation path",
+    keywords: ["node", "path", "nodejs", "binary", "executable"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.nodeRuntime,
+    label: "Node Runtime",
+    description:
+      "Choose between system Node.js and OctopusStudio-managed Node.js",
+    keywords: ["node", "nodejs", "runtime", "managed", "system"],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+  {
+    id: SETTING_IDS.customAppsFolder,
+    label: "Customize Apps Folder",
+    description:
+      "Set the top-level folder that OctopusStudio will store new applications in",
+    keywords: [
+      "customize",
+      "apps",
+      "path",
+      "folder",
+      "directory",
+      "octopus-studio-apps",
+    ],
+    sectionId: SECTION_IDS.general,
+    sectionLabel: "General",
+  },
+
+  // Workflow Settings
+  {
+    id: SETTING_IDS.defaultChatMode,
+    label: "Default Chat Mode",
+    description: "Choose the default mode for new chats",
+    keywords: ["chat", "mode", "build", "agent", "mcp", "default"],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.autoApprove,
+    label: "Auto-approve",
+    description: "Automatically approve code changes and run them",
+    keywords: ["approve", "automatic", "code changes", "auto"],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.appBlueprint,
+    label: "App Blueprint",
+    description:
+      "Generate a lightweight app blueprint (name, design, color, template) before building new apps",
+    keywords: [
+      "blueprint",
+      "app",
+      "new app",
+      "template",
+      "questionnaire",
+      "design",
+      "workflow",
+    ],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.testingForNewApps,
+    label: "Enable Testing for New Apps",
+    description:
+      "Automatically opt newly created apps into AI E2E testing by default",
+    keywords: [
+      "testing",
+      "tests",
+      "e2e",
+      "new app",
+      "opt in",
+      "default",
+      "workflow",
+    ],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.autoExpandPreview,
+    label: "Auto Expand Preview",
+    description:
+      "Automatically expand the preview panel when code changes are made",
+    keywords: ["preview", "expand", "panel", "automatic", "auto"],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.keepPreviewsRunning,
+    label: "Keep app previews running forever",
+    description:
+      "Prevent idle app previews from being stopped after 10 minutes; uses more memory but enables faster preview loads when switching apps",
+    keywords: [
+      "preview",
+      "idle",
+      "timeout",
+      "gc",
+      "garbage collect",
+      "memory",
+      "forever",
+      "keep",
+      "running",
+    ],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+  {
+    id: SETTING_IDS.chatEventNotification,
+    label: "Notifications",
+    description:
+      "Show native notifications when a chat response completes or a questionnaire needs your input while the app is not focused",
+    keywords: [
+      "notification",
+      "chat",
+      "complete",
+      "questionnaire",
+      "alert",
+      "background",
+    ],
+    sectionId: SECTION_IDS.workflow,
+    sectionLabel: "Workflow",
+  },
+
+  // AI Settings
+  {
+    id: SETTING_IDS.defaultModel,
+    label: "Default Model",
+    description:
+      "The model used for new chats and for anything that doesn't pick its own",
+    keywords: [
+      "model",
+      "default",
+      "provider",
+      "llm",
+      "worker",
+      "task",
+      "persona",
+    ],
+    sectionId: SECTION_IDS.ai,
+    sectionLabel: "AI",
+  },
+  {
+    id: SETTING_IDS.maxChatTurns,
+    label: "Max Chat Turns",
+    description: "Set the maximum number of conversation turns",
+    keywords: ["turns", "max", "conversation", "limit", "chat"],
+    sectionId: SECTION_IDS.ai,
+    sectionLabel: "AI",
+  },
+  {
+    id: SETTING_IDS.maxToolCallSteps,
+    label: "Max Tool Calls (Agent)",
+    description: "Set the maximum number of tool calls for local agent mode",
+    keywords: [
+      "tool",
+      "calls",
+      "max",
+      "limit",
+      "agent",
+      "steps",
+      "local",
+      "loop",
+    ],
+    sectionId: SECTION_IDS.ai,
+    sectionLabel: "AI",
+  },
+  {
+    id: SETTING_IDS.contextCompaction,
+    label: "Context Compaction",
+    description:
+      "Automatically compact long conversations to stay within context limits",
+    keywords: [
+      "context",
+      "compaction",
+      "compact",
+      "summarize",
+      "tokens",
+      "window",
+      "memory",
+    ],
+    sectionId: SECTION_IDS.ai,
+    sectionLabel: "AI",
+  },
+  // Provider Settings
+  {
+    id: SECTION_IDS.providers,
+    label: "Model Providers",
+    description: "Configure AI model providers and API keys",
+    keywords: [
+      "provider",
+      "model",
+      "api key",
+      "openai",
+      "anthropic",
+      "claude",
+      "gpt",
+      "gemini",
+      "llm",
+    ],
+    sectionId: SECTION_IDS.providers,
+    sectionLabel: "Model Providers",
+  },
+
+  // Telemetry
+  {
+    id: SETTING_IDS.telemetry,
+    label: "Telemetry",
+    description: "Enable or disable anonymous usage data collection",
+    keywords: [
+      "telemetry",
+      "analytics",
+      "usage",
+      "data",
+      "privacy",
+      "tracking",
+    ],
+    sectionId: SECTION_IDS.telemetry,
+    sectionLabel: "Telemetry",
+  },
+
+  // Integrations
+  {
+    id: SETTING_IDS.github,
+    label: "GitHub Integration",
+    description: "Connect your GitHub account",
+    keywords: ["github", "git", "integration", "connect", "account"],
+    sectionId: SECTION_IDS.integrations,
+    sectionLabel: "Integrations",
+  },
+  {
+    id: SETTING_IDS.vercel,
+    label: "Vercel Integration",
+    description: "Connect your Vercel account for deployments",
+    keywords: ["vercel", "deploy", "integration", "hosting", "connect"],
+    sectionId: SECTION_IDS.integrations,
+    sectionLabel: "Integrations",
+  },
+  {
+    id: SETTING_IDS.supabase,
+    label: "Supabase Integration",
+    description: "Connect your Supabase project",
+    keywords: [
+      "supabase",
+      "database",
+      "integration",
+      "backend",
+      "connect",
+      "postgres",
+    ],
+    sectionId: SECTION_IDS.integrations,
+    sectionLabel: "Integrations",
+  },
+  {
+    id: SETTING_IDS.neon,
+    label: "Neon Integration",
+    description: "Connect your Neon database",
+    keywords: [
+      "neon",
+      "database",
+      "integration",
+      "postgres",
+      "connect",
+      "serverless",
+    ],
+    sectionId: SECTION_IDS.integrations,
+    sectionLabel: "Integrations",
+  },
+  {
+    id: SETTING_IDS.imageSearch,
+    label: "Image Search",
+    description:
+      "Configure stock image search providers (Pexels, Pixabay, Openverse)",
+    keywords: [
+      "image",
+      "search",
+      "pexels",
+      "pixabay",
+      "openverse",
+      "stock",
+      "photo",
+      "api key",
+    ],
+    sectionId: SECTION_IDS.integrations,
+    sectionLabel: "Integrations",
+  },
+
+  // Agent Permissions
+  {
+    id: SECTION_IDS.agentPermissions,
+    label: "Agent Permissions",
+    description: "Configure permissions for agent built-in tools",
+    keywords: [
+      "agent",
+      "permissions",
+      "tools",
+      "approve",
+      "allow",
+      "consent",
+      "pro",
+    ],
+    sectionId: SECTION_IDS.agentPermissions,
+    sectionLabel: "Agent Permissions",
+  },
+
+  // Advanced
+  {
+    id: SECTION_IDS.advanced,
+    label: "Advanced",
+    description: "Power-user settings for Git, sandboxing, packages, and MCP",
+    keywords: [
+      "advanced",
+      "git",
+      "sandbox",
+      "npm",
+      "mcp",
+      "security",
+      "native",
+    ],
+    sectionId: SECTION_IDS.advanced,
+    sectionLabel: "Advanced",
+  },
+  {
+    id: SETTING_IDS.enableSandboxScriptExecution,
+    label: "Enable sandbox script execution",
+    description:
+      "Allow local-agent attachment scripts to inspect files with execute_sandbox_script",
+    keywords: [
+      "script",
+      "scripts",
+      "sandbox",
+      "attachments",
+      "mustard",
+      "agent",
+    ],
+    sectionId: SECTION_IDS.advanced,
+    sectionLabel: "Advanced",
+  },
+  {
+    id: SETTING_IDS.blockUnsafeNpmPackages,
+    label: "Block unsafe npm packages",
+    description: "Uses socket.dev to detect unsafe packages and blocks them",
+    keywords: ["socket", "npm", "firewall", "package", "unsafe", "security"],
+    sectionId: SECTION_IDS.advanced,
+    sectionLabel: "Advanced",
+  },
+  {
+    id: SETTING_IDS.autoApproveNonSchemaSql,
+    label: "Skip consent for non-schema SQL",
+    description:
+      "In Agent mode, skip the consent prompt when running SQL that does not change the database schema. Schema changes still require approval",
+    keywords: [
+      "sql",
+      "database",
+      "consent",
+      "approve",
+      "schema",
+      "agent",
+      "supabase",
+      "neon",
+    ],
+    sectionId: SECTION_IDS.advanced,
+    sectionLabel: "Advanced",
+  },
+
+  // Experiments
+  {
+    id: SETTING_IDS.autoApproveSafeMcpTools,
+    label: "Skip consent for safe MCP tools",
+    description:
+      "In Agent mode, use a fast model to judge each MCP tool call and skip the consent prompt for safe ones. Risky actions still require approval. Requires OctopusStudio Pro",
+    keywords: [
+      "mcp",
+      "consent",
+      "approve",
+      "tool",
+      "agent",
+      "safe",
+      "pro",
+      "auto",
+      "experiment",
+    ],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+  {
+    id: SETTING_IDS.enableCloudSandbox,
+    label: "Enable Cloud Sandbox (Pro)",
+    description:
+      "Run your app on the Cloud for a more secure runtime that uses fewer local system resources",
+    keywords: [
+      "cloud",
+      "sandbox",
+      "runtime",
+      "experiment",
+      "pro",
+      "credits",
+      "secure",
+    ],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+  {
+    id: SETTING_IDS.enableMcpToolSearch,
+    label: "Enable MCP tool search",
+    description:
+      "When many MCP tools are enabled, let the agent search for the tools on demand instead of listing every tool in its context. Requires sandbox script execution",
+    keywords: ["mcp", "search", "tools", "agent", "sandbox", "context"],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+  {
+    id: SETTING_IDS.enablePnpmMinimumReleaseAgeWarning,
+    label: "Enable pnpm upgrade warning",
+    description:
+      "Show the pnpm release-age warning toast and one-click pnpm upgrade action",
+    keywords: [
+      "pnpm",
+      "npm",
+      "package",
+      "release",
+      "warning",
+      "toast",
+      "upgrade",
+      "experiment",
+    ],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+  {
+    id: SETTING_IDS.enableCodeExplorer,
+    label: "Enable code explorer (Pro)",
+    description:
+      "Let the local agent explore configured TypeScript projects with a compiler-backed code graph",
+    keywords: [
+      "code",
+      "explorer",
+      "typescript",
+      "symbol",
+      "graph",
+      "agent",
+      "tools",
+      "experiment",
+    ],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+  {
+    id: SETTING_IDS.enableMultiWindow,
+    label: "Enable multiple windows",
+    description:
+      'Show the experimental "Open in New Window" action in app context menus',
+    keywords: [
+      "window",
+      "multiple",
+      "multi-window",
+      "app",
+      "context menu",
+      "experiment",
+    ],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+
+  {
+    id: SETTING_IDS.enableSelectAppFromHomeChatInput,
+    label: "Enable Select App from Home Chat Input",
+    description:
+      "Show an app selector in the home chat input to start a chat referencing an existing app",
+    keywords: ["app", "select", "home", "chat", "experiment", "input"],
+    sectionId: SECTION_IDS.experiments,
+    sectionLabel: "Experiments",
+  },
+
+  // Danger Zone
+  {
+    id: SETTING_IDS.reset,
+    label: "Reset Everything",
+    description:
+      "Delete all apps, chats, and settings. This action cannot be undone.",
+    keywords: ["reset", "delete", "clear", "wipe", "danger", "destructive"],
+    sectionId: SECTION_IDS.dangerZone,
+    sectionLabel: "Danger Zone",
+  },
+];

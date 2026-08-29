@@ -1,0 +1,547 @@
+import React, { useCallback, useEffect, useRef } from "react";
+import {
+  $getRoot,
+  $createParagraphNode,
+  $createTextNode,
+  EditorState,
+} from "lexical";
+import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import {
+  BeautifulMentionsPlugin,
+  BeautifulMentionNode,
+  $createBeautifulMentionNode,
+  type BeautifulMentionsTheme,
+  type BeautifulMentionsMenuItemProps,
+} from "lexical-beautiful-mentions";
+import { KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH } from "lexical";
+import { useLoadApps } from "@/hooks/useLoadApps";
+import { usePrompts } from "@/hooks/usePrompts";
+import { useAppMediaFiles } from "@/hooks/useAppMediaFiles";
+import { forwardRef } from "react";
+import { useAtomValue } from "jotai";
+import { selectedAppIdAtom } from "@/atoms/appAtoms";
+import {
+  APP_MENTION_NAME_PATTERN,
+  formatKnownAppMentionsForPrompt,
+  MENTION_REGEX,
+  parseAppMentions,
+  splitAppMentionTrailingDots,
+} from "@/shared/parse_mention_apps";
+import { useLoadApp } from "@/hooks/useLoadApp";
+import { HistoryNavigation, HISTORY_TRIGGER } from "./HistoryNavigation";
+import { slugForPrompt } from "@/ipc/utils/replaceSlashSkillReference";
+
+// Define the theme for mentions
+const beautifulMentionsTheme: BeautifulMentionsTheme = {
+  "@": "px-2 py-0.5 mx-0.5 bg-accent text-accent-foreground rounded-md",
+  "@Focused": "outline-none ring-2 ring-ring",
+  "/": "px-2 py-0.5 mx-0.5 bg-accent text-accent-foreground rounded-md",
+  "/Focused": "outline-none ring-2 ring-ring",
+};
+
+// Custom menu item component
+const CustomMenuItem = forwardRef<
+  HTMLLIElement,
+  BeautifulMentionsMenuItemProps
+>(({ selected, item, ...props }, ref) => {
+  const isPrompt = item.data?.type === "prompt";
+  const isSkill = item.data?.type === "skill";
+  const isApp = item.data?.type === "app";
+  const isHistory = item.data?.type === "history";
+  const isMedia = item.data?.type === "media";
+  const label = isSkill
+    ? "Skill"
+    : isPrompt
+      ? "Prompt"
+      : isApp
+        ? "App"
+        : isHistory
+          ? ""
+          : isMedia
+            ? "Media"
+            : "File";
+  const value = (item as any)?.value;
+
+  // For history items, show full text without label
+  if (isHistory) {
+    return (
+      <li
+        className={`m-0 px-3 py-2 cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis ${
+          selected
+            ? "bg-accent text-accent-foreground"
+            : "bg-popover text-popover-foreground hover:bg-accent/50"
+        }`}
+        {...props}
+        ref={ref}
+      >
+        <span className="truncate text-sm">{value}</span>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className={`m-0 flex items-center px-3 py-2 cursor-pointer whitespace-nowrap ${
+        selected
+          ? "bg-accent text-accent-foreground"
+          : "bg-popover text-popover-foreground hover:bg-accent/50"
+      }`}
+      {...props}
+      ref={ref}
+    >
+      <div className="flex items-center space-x-2 min-w-0">
+        <span
+          className={`px-2 py-0.5 text-xs font-medium rounded-md flex-shrink-0 ${
+            isSkill || isPrompt
+              ? "bg-purple-500 text-white"
+              : isApp
+                ? "bg-primary text-primary-foreground"
+                : isMedia
+                  ? "bg-amber-500 text-white"
+                  : "bg-blue-600 text-white"
+          }`}
+        >
+          {label}
+        </span>
+        <span className="truncate text-sm">{value}</span>
+      </div>
+    </li>
+  );
+});
+
+// Custom menu component
+function CustomMenu({ loading: _loading, ...props }: any) {
+  return (
+    <ul
+      className="m-0 mb-1 min-w-[300px] w-auto max-h-64 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg z-50"
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        left: 0,
+        right: 0,
+        transform: "translateY(-20px)", // Add a larger gap between menu and input (12px higher)
+      }}
+      data-mentions-menu="true"
+      {...props}
+    />
+  );
+}
+
+// Plugin to handle Enter key
+function EnterKeyPlugin({
+  onSubmit,
+  disableSendButton,
+}: {
+  onSubmit: () => void;
+  disableSendButton: boolean;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event: KeyboardEvent) => {
+        // Check if mentions menu is open by looking for our custom menu element
+        const mentionsMenu = document.querySelector(
+          '[data-mentions-menu="true"]',
+        );
+        const hasVisibleItems =
+          mentionsMenu && mentionsMenu.children.length > 0;
+
+        if (hasVisibleItems) {
+          // If mentions menu is open with items, let the mentions plugin handle the Enter key
+          return false;
+        }
+
+        if (!event.shiftKey && !disableSendButton) {
+          event.preventDefault();
+          onSubmit();
+          return true;
+        }
+        return false;
+      },
+      COMMAND_PRIORITY_HIGH, // Use higher priority to catch before mentions plugin
+    );
+  }, [editor, onSubmit, disableSendButton]);
+
+  return null;
+}
+
+function EditableStatePlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
+
+  return null;
+}
+
+// Plugin to sync external value prop into the editor
+function ExternalValueSyncPlugin({
+  value,
+  promptsById,
+}: {
+  value: string;
+  promptsById: Record<number, string>;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    // Derive the display text that should appear in the editor (@Name) from the
+    // internal value representation (@app:Name)
+    let displayText = (value || "").replace(MENTION_REGEX, "@$1");
+    displayText = displayText.replace(/@prompt:(\d+)/g, (_m, idStr) => {
+      const id = Number(idStr);
+      const title = promptsById[id];
+      return title ? `@${title}` : _m;
+    });
+    // Strip @media: prefix for display
+    displayText = displayText.replace(/@media:([^\s]+)/g, (_, ref) => {
+      try {
+        return `@${decodeURIComponent(ref)}`;
+      } catch {
+        return `@${ref}`;
+      }
+    });
+
+    const currentText = editor.getEditorState().read(() => {
+      const root = $getRoot();
+      return root.getTextContent();
+    });
+
+    // If the editor already reflects the same display text, do nothing to avoid loops
+    if (currentText === displayText) return;
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+
+      const paragraph = $createParagraphNode();
+
+      // Build nodes from internal value, turning @app:Name, @prompt:<id>, @file:<path>, and @media:<ref> into mention nodes
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      const combined = new RegExp(
+        `@app:(${APP_MENTION_NAME_PATTERN})|@prompt:(\\d+)|@file:([^\\s]+)|@media:([^\\s]+)`,
+        "g",
+      );
+      while ((match = combined.exec(value)) !== null) {
+        const start = match.index;
+        const full = match[0];
+        if (start > lastIndex) {
+          const textBefore = value.slice(lastIndex, start);
+          if (textBefore) paragraph.append($createTextNode(textBefore));
+        }
+        if (match[1]) {
+          const { appName, trailingDots } = splitAppMentionTrailingDots(
+            match[1],
+          );
+          paragraph.append($createBeautifulMentionNode("@", appName));
+          if (trailingDots) {
+            paragraph.append($createTextNode(trailingDots));
+          }
+        } else if (match[2]) {
+          const id = Number(match[2]);
+          const title = promptsById[id] || `prompt:${id}`;
+          paragraph.append($createBeautifulMentionNode("@", title));
+        } else if (match[3]) {
+          const filePath = match[3];
+          paragraph.append($createBeautifulMentionNode("@", filePath));
+        } else if (match[4]) {
+          let mediaRef: string;
+          try {
+            mediaRef = decodeURIComponent(match[4]);
+          } catch {
+            mediaRef = match[4];
+          }
+          paragraph.append($createBeautifulMentionNode("@", mediaRef));
+        }
+        lastIndex = start + full.length;
+      }
+      if (lastIndex < value.length) {
+        const trailing = value.slice(lastIndex);
+        if (trailing) paragraph.append($createTextNode(trailing));
+      }
+
+      if (value && paragraph.getTextContent() === "") {
+        paragraph.append($createTextNode(value));
+      }
+
+      root.append(paragraph);
+      paragraph.selectEnd();
+    });
+  }, [editor, value, promptsById]);
+
+  return null;
+}
+
+interface LexicalChatInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onPaste?: (e: React.ClipboardEvent) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  messageHistory: string[];
+  excludeCurrentApp: boolean;
+  disableSendButton: boolean;
+}
+
+function onError(error: Error) {
+  console.error(error);
+}
+
+export function LexicalChatInput({
+  value,
+  onChange,
+  onSubmit,
+  onPaste,
+  excludeCurrentApp,
+  placeholder = "Ask Octopus Studio to build...",
+  disabled = false,
+  disableSendButton,
+  messageHistory = [],
+}: LexicalChatInputProps) {
+  const { apps } = useLoadApps();
+  const { prompts } = usePrompts();
+  const { mediaApps } = useAppMediaFiles();
+  const historyTriggerActiveRef = useRef(false);
+  const selectedAppId = useAtomValue(selectedAppIdAtom);
+  const { app } = useLoadApp(selectedAppId);
+  const appFiles = app?.files;
+
+  // Prepare mention items - convert apps to mention format
+  const mentionItems = React.useMemo(() => {
+    const result: Record<string, any[]> = {
+      "@": [],
+      "/": [],
+      [HISTORY_TRIGGER]: [],
+    };
+
+    // Add history items under the history trigger - always available regardless of app loading
+    // Reverse so most recent appears at the bottom
+    const historyItems = (messageHistory || [])
+      .slice()
+      .reverse()
+      .map((item) => ({
+        value: item,
+        type: "history",
+      }));
+    result[HISTORY_TRIGGER] = historyItems;
+
+    // Skills (slash commands): all prompts by slug
+    const skillItems = (prompts || [])
+      .map((p) => ({
+        value: slugForPrompt(p),
+        type: "skill",
+        id: p.id,
+      }))
+      .filter((item) => item.value != null && item.value !== "");
+    result["/"] = skillItems;
+
+    if (!apps) return result;
+
+    // Get current app name
+    const currentApp = apps.find((app) => app.id === selectedAppId);
+    const currentAppName = currentApp?.name;
+
+    // Parse already mentioned apps from current input value
+    const alreadyMentioned = parseAppMentions(value);
+
+    // Filter out current app and already mentioned apps
+    const filteredApps = apps.filter((app) => {
+      // Exclude current app
+      if (excludeCurrentApp && app.name === currentAppName) return false;
+
+      // Exclude already mentioned apps (case-insensitive comparison)
+      if (
+        alreadyMentioned.some(
+          (mentioned) => mentioned.toLowerCase() === app.name.toLowerCase(),
+        )
+      )
+        return false;
+
+      return true;
+    });
+
+    const appMentions = filteredApps.map((app) => ({
+      value: app.name,
+      type: "app",
+    }));
+
+    const promptItems = (prompts || []).map((p) => ({
+      value: p.title,
+      type: "prompt",
+      id: p.id,
+    }));
+
+    const fileItems = (appFiles || []).map((item) => ({
+      value: item,
+      type: "file",
+    }));
+
+    // Build media mention items from the current app's media files only
+    const currentAppMedia = mediaApps.find(
+      (app) => app.appId === selectedAppId,
+    );
+    const mediaItems = (currentAppMedia?.files ?? []).map((file) => ({
+      value: file.fileName,
+      type: "media",
+    }));
+    result["@"] = [...mediaItems, ...appMentions, ...promptItems, ...fileItems];
+
+    return result;
+  }, [
+    apps,
+    selectedAppId,
+    value,
+    excludeCurrentApp,
+    prompts,
+    appFiles,
+    messageHistory,
+    mediaApps,
+  ]);
+
+  const initialConfig = {
+    namespace: "ChatInput",
+    theme: {
+      beautifulMentions: beautifulMentionsTheme,
+    },
+    onError,
+    nodes: [BeautifulMentionNode],
+    editable: !disabled,
+  };
+
+  const handleEditorChange = useCallback(
+    (editorState: EditorState) => {
+      editorState.read(() => {
+        const root = $getRoot();
+        let textContent = root.getTextContent();
+
+        // If the history trigger is active, keep the input value empty while the
+        // menu is open, and always strip the invisible trigger from the value.
+        if (historyTriggerActiveRef.current) {
+          const hasTrigger = textContent.includes(HISTORY_TRIGGER);
+          const withoutTrigger = textContent.split(HISTORY_TRIGGER).join("");
+          // Clear the ref when trigger is gone OR when real content is inserted
+          // (e.g., when a menu item is selected). This ensures consistent state
+          // even if the selected text contains a zero-width space character.
+          if (!hasTrigger || withoutTrigger.trim() !== "") {
+            historyTriggerActiveRef.current = false;
+          }
+          if (withoutTrigger.trim() === "") {
+            textContent = "";
+          } else {
+            textContent = withoutTrigger;
+          }
+        }
+
+        // Short-circuit if there's no "@" symbol in the text
+        if (textContent.includes("@")) {
+          // Convert media mentions : @filename -> @media:filename
+          const currentAppMediaFiles = mediaApps.find(
+            (app) => app.appId === selectedAppId,
+          );
+          if (currentAppMediaFiles) {
+            // Sort files by name length descending so longer names are matched
+            // first, preventing prefix collisions (e.g. "cat.png copy.png" vs "cat.png").
+            const sortedFiles = [...currentAppMediaFiles.files].sort(
+              (a, b) => b.fileName.length - a.fileName.length,
+            );
+            for (const file of sortedFiles) {
+              const escaped = file.fileName.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&",
+              );
+              const mediaRegex = new RegExp(`@(${escaped})(?![\\w-])`, "g");
+              textContent = textContent.replace(
+                mediaRegex,
+                `@media:${encodeURIComponent(file.fileName)}`,
+              );
+            }
+          }
+
+          // Transform @AppName mentions to @app:AppName format
+          const appNames = (apps ?? []).map((app) => app.name);
+          textContent = formatKnownAppMentionsForPrompt(textContent, appNames);
+          // Convert @PromptTitle to @prompt:<id>
+          const map = new Map((prompts || []).map((p) => [p.title, p.id]));
+          for (const [title, id] of map.entries()) {
+            const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const regex = new RegExp(`@(${escapedTitle})(?![\\w-])`, "g");
+            textContent = textContent.replace(regex, `@prompt:${id}`);
+          }
+
+          for (const fullPath of appFiles || []) {
+            const escapedDisplay = fullPath.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&",
+            );
+            const fileRegex = new RegExp(`@(${escapedDisplay})(?![\\w-])`, "g");
+            textContent = textContent.replace(fileRegex, `@file:${fullPath}`);
+          }
+        }
+        onChange(textContent);
+      });
+    },
+    [onChange, apps, prompts, appFiles, mediaApps, selectedAppId],
+  );
+
+  return (
+    <LexicalComposer initialConfig={initialConfig}>
+      <div className="relative flex-1">
+        <PlainTextPlugin
+          contentEditable={
+            <ContentEditable
+              className="flex-1 px-3 pt-3 pb-2 focus:outline-none overflow-y-auto min-h-[44px] max-h-[200px] resize-none text-[15px]"
+              aria-placeholder={placeholder}
+              placeholder={
+                <div className="absolute top-3 left-3 text-muted-foreground pointer-events-none select-none text-[15px]">
+                  {placeholder}
+                </div>
+              }
+              onPaste={onPaste}
+            />
+          }
+          ErrorBoundary={LexicalErrorBoundary}
+        />
+        <BeautifulMentionsPlugin
+          items={mentionItems}
+          menuComponent={CustomMenu}
+          menuItemComponent={CustomMenuItem}
+          creatable={false}
+          insertOnBlur={false}
+          menuItemLimit={10}
+        />
+        <OnChangePlugin onChange={handleEditorChange} />
+        <HistoryPlugin />
+        <EditableStatePlugin editable={!disabled} />
+        <EnterKeyPlugin
+          onSubmit={onSubmit}
+          disableSendButton={disableSendButton}
+        />
+        <ExternalValueSyncPlugin
+          value={value}
+          promptsById={Object.fromEntries(
+            (prompts || []).map((p) => [p.id, p.title]),
+          )}
+        />
+        <HistoryNavigation
+          messageHistory={messageHistory}
+          onTriggerInserted={() => {
+            historyTriggerActiveRef.current = true;
+          }}
+          onTriggerCleared={() => {
+            historyTriggerActiveRef.current = false;
+          }}
+        />
+      </div>
+    </LexicalComposer>
+  );
+}

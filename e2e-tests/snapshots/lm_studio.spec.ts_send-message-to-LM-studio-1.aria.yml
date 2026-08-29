@@ -1,0 +1,8 @@
+- button "Restore to this point"
+- paragraph: hi
+- button "file1.txt file1.txt Edit"
+- paragraph: More EOM
+- button "Copy"
+- text: lmstudio-model-1
+- button "Undo"
+- button "Retry"

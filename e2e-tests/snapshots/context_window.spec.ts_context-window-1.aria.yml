@@ -1,0 +1,12 @@
+- paragraph: tc=1
+- paragraph: "1"
+- paragraph: tc=2
+- paragraph: "2"
+- paragraph: "[dump] tc=3"
+- paragraph: /\[\[octopus-studio-dump-path=\/Users\/will\/Documents\/GitHub\/octopus-studio-zero\/testing\/fake-llm-server\/dist\/generated\/\d+\.json\]\]/
+- paragraph: "[dump] tc=4"
+- paragraph: /\[\[octopus-studio-dump-path=\/Users\/will\/Documents\/GitHub\/octopus-studio-zero\/testing\/fake-llm-server\/dist\/generated\/\d+\.json\]\]/
+- paragraph: "[dump] tc=5"
+- paragraph: /\[\[octopus-studio-dump-path=\/Users\/will\/Documents\/GitHub\/octopus-studio-zero\/testing\/fake-llm-server\/dist\/generated\/\d+\.json\]\]/
+- button "Retry":
+  - img

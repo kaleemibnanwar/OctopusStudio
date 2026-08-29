@@ -1,0 +1,346 @@
+// Migrated from e2e-tests/undo.spec.ts, then converted from the node
+// chat-flow harness to the HYBRID harness (real <ChatPanel> over the real IPC
+// stack). The node version invoked `list-versions` + `revert-version` directly
+// with the params the renderer computes; this version clicks the REAL Undo
+// button in MessagesList's footer, which computes the previous version from
+// the loaded version list (falling back to the message's sourceCommitHash)
+// and dispatches the real main-owned version-preview actor — then asserts
+// files, git log, db messages, and the message list DOM shrinking.
+//
+// The harness mounts the real Toaster, so the UI-visible
+// "Restored version" success toast is asserted alongside the revert commit,
+// restored files, and deleted messages.
+//
+// Covers the undo and "undo after assistant with no code" e2e scenarios.
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+
+import {
+  setupHybridChatHarness,
+  type HybridChatHarness,
+} from "@/testing/hybrid_chat_harness";
+import { h } from "@/testing/hybrid.setup";
+import { messages as messagesTable } from "@/db/schema";
+import { asc, eq } from "drizzle-orm";
+
+const INDEX_PATH = "src/pages/Index.tsx";
+
+function commitWithTestIdentity(cwd: string, message: string) {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=Test User",
+      "commit",
+      "-m",
+      message,
+    ],
+    { cwd },
+  );
+}
+
+describe("undo (integration)", () => {
+  let harness: HybridChatHarness;
+
+  const loadMessages = () =>
+    harness.db.query.messages.findMany({
+      where: eq(messagesTable.chatId, harness.chatId),
+      orderBy: [asc(messagesTable.id)],
+    });
+
+  const errorEvents = () =>
+    harness.bridge.sentEvents.filter(
+      (e) => e.channel === "chat:response:error",
+    );
+
+  const settleRendererActions = async () => {
+    await act(async () => {
+      await harness.bridge.settleInFlight();
+      await Promise.resolve();
+    });
+  };
+
+  /** Type + send a prompt through the real UI and gate on ITS stream end. */
+  const sendTurn = async (prompt: string) => {
+    const end = harness.waitForNextStreamEnd(harness.chatId);
+    const { send } = await harness.typeInChat(prompt);
+    send();
+    await waitFor(() => expect(screen.getByText(prompt)).toBeTruthy(), {
+      timeout: 15_000,
+    });
+    await end;
+  };
+
+  /**
+   * Click the REAL Undo button in MessagesList's footer (it renders when the
+   * last message is an assistant and nothing is streaming) and wait for it to
+   * be enabled first.
+   */
+  const clickUndo = async () => {
+    await waitFor(
+      () => {
+        const button = screen.getByRole("button", { name: /Undo/ });
+        expect(button.hasAttribute("disabled")).toBe(false);
+      },
+      { timeout: 15_000 },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Undo/ }));
+  };
+
+  const runUndoCycle = async () => {
+    harness.mount();
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("messages-list")).toBeTruthy();
+        expect(screen.getByTestId("chat-input-container")).toBeTruthy();
+      },
+      { timeout: 15_000 },
+    );
+
+    // Two code-writing turns.
+    await sendTurn("tc=write-index");
+    await waitFor(
+      () => expect(screen.getAllByText(/And it's done!/)).toHaveLength(1),
+      { timeout: 15_000 },
+    );
+    expect(harness.readAppFile(INDEX_PATH)).toContain("Testing:write-index!");
+
+    await sendTurn("tc=write-index-2");
+    await waitFor(
+      () => expect(screen.getAllByText(/And it's done!/)).toHaveLength(2),
+      { timeout: 15_000 },
+    );
+    expect(harness.readAppFile(INDEX_PATH)).toContain(
+      "Testing:write-index(2)!",
+    );
+    expect(await loadMessages()).toHaveLength(4);
+
+    // First undo: back to the write-index version; the undone turn's messages
+    // are deleted (from the db AND from the rendered messages list).
+    await clickUndo();
+    await waitFor(() =>
+      expect(screen.getAllByText("Restored version").length).toBeGreaterThan(0),
+    );
+    await waitFor(
+      () => expect(screen.queryByText("tc=write-index-2")).toBeNull(),
+      { timeout: 15_000 },
+    );
+    await waitFor(async () => expect(await loadMessages()).toHaveLength(2), {
+      timeout: 15_000,
+    });
+    expect(harness.readAppFile(INDEX_PATH)).toContain("Testing:write-index!");
+    expect(harness.readAppFile(INDEX_PATH)).not.toContain(
+      "Testing:write-index(2)!",
+    );
+    expect(harness.gitLog()[0]).toContain(
+      "Reverted all changes back to version",
+    );
+
+    // Second undo: back to the pristine fixture (the e2e asserted the
+    // scaffold's "Welcome to Your Blank App" page; in the minimal fixture the
+    // page written by the LLM simply doesn't exist initially). The first
+    // forward-revert commit and the previously undone turn are now extra
+    // commits relative to this older target, so confirmation is required.
+    await clickUndo();
+    fireEvent.click(await screen.findByTestId("confirm-revert-anyway-button"));
+    await waitFor(() =>
+      expect(screen.getAllByText("Restored version").length).toBeGreaterThan(0),
+    );
+    await waitFor(
+      () => expect(screen.queryByText("tc=write-index")).toBeNull(),
+      { timeout: 15_000 },
+    );
+    await waitFor(async () => expect(await loadMessages()).toHaveLength(0), {
+      timeout: 15_000,
+    });
+    expect(harness.appFileExists(INDEX_PATH)).toBe(false);
+    // The messages list is empty again (it renders its empty state — the
+    // "No messages yet" placeholder or a setup banner — with no chat turns).
+    expect(screen.queryByText(/And it's done!/)).toBeNull();
+    await waitFor(
+      () => expect(screen.getByTestId("messages-list")).toBeTruthy(),
+      { timeout: 15_000 },
+    );
+
+    // No error events were emitted during the whole cycle.
+    expect(errorEvents()).toHaveLength(0);
+    await settleRendererActions();
+  };
+
+  beforeAll(async () => {
+    harness = await setupHybridChatHarness({
+      electronMock: h,
+      autoApprove: true,
+      settings: { isTestMode: true },
+    });
+    execFileSync("git", ["branch", "-M", "master"], {
+      cwd: harness.appDir,
+      stdio: "pipe",
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await harness?.dispose();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("undo with git", async () => {
+    await runUndoCycle();
+  }, 60_000);
+
+  it("confirms before undoing an extra commit and supports cancellation", async () => {
+    harness.mount();
+    await waitFor(
+      () => expect(screen.getByTestId("chat-input-container")).toBeTruthy(),
+      { timeout: 15_000 },
+    );
+
+    await sendTurn("tc=write-index");
+    await waitFor(
+      () => expect(screen.getByText(/And it's done!/)).toBeTruthy(),
+      { timeout: 15_000 },
+    );
+    // The stream-end event can arrive just before the main-side handler has
+    // finished its Git commit. Drain that invoke before starting another Git
+    // operation, or both processes can contend for .git/index.lock.
+    await settleRendererActions();
+
+    const manualPath = path.join(harness.appDir, "manual-change.txt");
+    fs.writeFileSync(manualPath, "keep me\n");
+    execFileSync("git", ["add", "manual-change.txt"], {
+      cwd: harness.appDir,
+    });
+    commitWithTestIdentity(harness.appDir, "Manual work after AI turn");
+
+    await settleRendererActions();
+    const versionInvokeBaseline = harness.bridge.invokeLog.filter(
+      (entry) => entry.channel === "list-versions",
+    ).length;
+    const undoButton = screen.getByRole("button", { name: /Undo/ });
+    fireEvent.click(undoButton);
+    fireEvent.click(undoButton);
+    expect(
+      await screen.findByTestId("extra-commits-revert-dialog"),
+    ).toBeTruthy();
+    expect(
+      harness.bridge.invokeLog.filter(
+        (entry) => entry.channel === "list-versions",
+      ).length - versionInvokeBaseline,
+    ).toBe(1);
+    expect(screen.getByText("Manual work after AI turn")).toBeTruthy();
+    expect(fs.existsSync(manualPath)).toBe(true);
+    expect(await loadMessages()).toHaveLength(2);
+
+    harness.setSelectedAppId(null);
+    await waitFor(() =>
+      expect(screen.queryByTestId("extra-commits-revert-dialog")).toBeNull(),
+    );
+    harness.setSelectedAppId(harness.appId);
+    await waitFor(() =>
+      expect(screen.queryByTestId("extra-commits-revert-dialog")).toBeNull(),
+    );
+
+    await clickUndo();
+    fireEvent.click(await screen.findByTestId("cancel-revert-button"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("extra-commits-revert-dialog")).toBeNull(),
+    );
+    expect(fs.existsSync(manualPath)).toBe(true);
+    expect(await loadMessages()).toHaveLength(2);
+
+    await clickUndo();
+    await screen.findByTestId("extra-commits-revert-dialog");
+    const racedPath = path.join(harness.appDir, "raced-change.txt");
+    fs.writeFileSync(racedPath, "newer work\n");
+    execFileSync("git", ["add", "raced-change.txt"], { cwd: harness.appDir });
+    commitWithTestIdentity(harness.appDir, "Work created during confirmation");
+    fireEvent.click(screen.getByTestId("confirm-revert-anyway-button"));
+    await waitFor(() => expect(fs.existsSync(racedPath)).toBe(true));
+    expect(await loadMessages()).toHaveLength(2);
+
+    await clickUndo();
+    fireEvent.click(await screen.findByTestId("confirm-revert-anyway-button"));
+    await waitFor(() => expect(fs.existsSync(manualPath)).toBe(false), {
+      timeout: 15_000,
+    });
+    expect(fs.existsSync(racedPath)).toBe(false);
+    await waitFor(async () => expect(await loadMessages()).toHaveLength(0), {
+      timeout: 15_000,
+    });
+    await settleRendererActions();
+  }, 60_000);
+
+  it("undo after assistant with no code", async () => {
+    harness.mount();
+    await waitFor(
+      () => expect(screen.getByTestId("chat-input-container")).toBeTruthy(),
+      { timeout: 15_000 },
+    );
+
+    // First prompt - no code generated, so no commit on the assistant message.
+    await sendTurn("tc=no-code-response");
+    await waitFor(
+      () =>
+        expect(
+          screen.getByText(/This is a response without any code changes/),
+        ).toBeTruthy(),
+      { timeout: 15_000 },
+    );
+    const noCodeMessages = await loadMessages();
+    const noCodeAssistant = noCodeMessages[noCodeMessages.length - 1];
+    expect(noCodeAssistant.role).toBe("assistant");
+    expect(noCodeAssistant.commitHash).toBeNull();
+
+    // Second prompt - generates code.
+    await sendTurn("tc=write-index");
+    await waitFor(
+      () => expect(screen.getAllByText(/And it's done!/)).toHaveLength(1),
+      { timeout: 15_000 },
+    );
+    expect(harness.readAppFile(INDEX_PATH)).toContain("Testing:write-index!");
+
+    // Undo should work even though the first assistant had no commit.
+    await clickUndo();
+    await waitFor(() =>
+      expect(screen.getAllByText("Restored version").length).toBeGreaterThan(0),
+    );
+    await waitFor(
+      () => expect(screen.queryByText("tc=write-index")).toBeNull(),
+      { timeout: 15_000 },
+    );
+    expect(harness.appFileExists(INDEX_PATH)).toBe(false);
+
+    // Only the code-writing turn is deleted; the no-code turn remains (in the
+    // db and in the DOM).
+    const remaining = await loadMessages();
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0].content).toBe("tc=no-code-response");
+    await waitFor(
+      () => {
+        expect(screen.getByText("tc=no-code-response")).toBeTruthy();
+        expect(
+          screen.getByText(/This is a response without any code changes/),
+        ).toBeTruthy();
+      },
+      { timeout: 15_000 },
+    );
+
+    expect(errorEvents()).toHaveLength(0);
+  }, 60_000);
+});

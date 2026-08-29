@@ -1,0 +1,144 @@
+# Jotai Testing
+
+Learnings for writing unit tests against components/hooks that read or write Jotai atoms.
+
+## Sharing a store across `renderHook` calls in a single test
+
+When a test needs to render a hook, unmount it, and then render the hook again (e.g., to verify state persists across an unmount/remount — the exact scenario for atoms that replace local `useState`), all `renderHook` calls must share the **same Jotai store**. Otherwise each `renderHook`'s `Provider` wrapper creates its own isolated store and writes made by the first hook are invisible to the second.
+
+**Wrong** — each call to `makeWrapper()` returns a component that creates a fresh `<Provider>` (no store prop), so every `renderHook` gets a new default store:
+
+```tsx
+function makeWrapper() {
+  return function Wrapper({ children }) {
+    return <Provider>{children}</Provider>;
+  };
+}
+```
+
+**Right** — create one store per test and bind every `renderHook` in that test to it:
+
+```tsx
+import { createStore, Provider } from "jotai";
+
+function makeWrapper() {
+  const store = createStore();
+  return function Wrapper({ children }) {
+    return <Provider store={store}>{children}</Provider>;
+  };
+}
+
+// In the test:
+const wrapper = makeWrapper();
+const first = renderHook(() => useMyAtomHook(id), { wrapper });
+// ... mutate state ...
+first.unmount();
+const second = renderHook(() => useMyAtomHook(id), { wrapper });
+// second now sees state written by first
+```
+
+The symptom when you get this wrong is assertions like `expected false to be true` on the remounted hook's state, even though the setter clearly ran against the first hook.
+
+See `src/atoms/githubSyncAtoms.test.tsx` for a complete example covering unmount/remount, cross-unmount completion, and per-key isolation.
+
+## StrictMode: use the `reactStrictMode` option, not a nested `<StrictMode>`
+
+`<StrictMode>` only replays mount effects when it is the **root** of the rendered tree. A wrapper component of your own that renders `<StrictMode>` around `children` — which is what you end up writing as soon as you also need a Jotai `Provider` — does not replay: the mount effect runs once and a StrictMode-only bug passes the test. Measured with `@testing-library/react` v16:
+
+| how StrictMode is introduced                                                                            | mount effect runs |
+| ------------------------------------------------------------------------------------------------------- | ----------------- |
+| `renderHook(…, { wrapper: StrictMode })`                                                                | 2                 |
+| `renderHook(…, { reactStrictMode: true })`                                                              | 2                 |
+| `renderHook(…, { wrapper: MyWrapper })` where `MyWrapper` renders `<StrictMode>{children}</StrictMode>` | **1**             |
+| `render(<StrictMode><Ui /></StrictMode>)`                                                               | 2                 |
+| `render(<Ui />, { wrapper: MyWrapper })`                                                                | **1**             |
+
+This is not a `renderHook` quirk — `render()` behaves the same way. Pass the render option, which composes with whatever wrapper you already need: `renderHook(() => useThing(), { wrapper, reactStrictMode: true })`.
+
+Worth testing because the app renders under `<StrictMode>` (`src/renderer.tsx`), where the dev mount/unmount/remount replay runs cleanup on a hook that is still mounted. A "am I still mounted" ref must therefore be re-armed in the effect body, not just at ref creation:
+
+```tsx
+const mountedRef = useRef(true);
+useEffect(() => {
+  mountedRef.current = true; // without this, permanently false after the replay
+  return () => {
+    mountedRef.current = false;
+  };
+}, []);
+```
+
+## No jest-dom matchers
+
+The vitest setup does not register `@testing-library/jest-dom`, so matchers like `toBeInTheDocument()` or `toBeDisabled()` fail with `Invalid Chai property: toBeInTheDocument`. Use plain assertions instead: `expect(screen.queryByTestId(...)).toBeNull()` / `.not.toBeNull()` for presence, and `expect((button as HTMLButtonElement).disabled).toBe(false)` for disabled state.
+
+## `act()` hides passive-effect timing windows
+
+React Testing Library wraps `render`/`rerender`/`fireEvent` in `act()`, which
+flushes passive effects synchronously before yielding to the microtask queue. A
+promise continuation therefore always runs _after_ effects in tests, so bugs that
+live in the window between commit and passive-effect flush cannot be reproduced
+with RTL. Don't burn time writing a failing test for one — fix it (usually by
+moving the bookkeeping to `useLayoutEffect`) and say in the PR why coverage stops
+at the app-switch behavior.
+
+## Hooks That Indirectly Use React Query
+
+If a `renderHook` test starts failing with `No QueryClient set, use QueryClientProvider to set one`, check whether the hook now calls another hook such as `useSettings()` or `useAppVersion()` that uses TanStack Query internally. Either wrap the test in a `QueryClientProvider` or mock the indirect hook when the test is only exercising Jotai/event behavior.
+
+`useStreamChat()` has the same shape but a different error — `useChatStreamManager requires ChatStreamProvider`. Watch for it when **hoisting a component out of a tab/route switch**: `PreviewPanel.test.tsx` renders the panel bare and mocks each child, so anything newly rendered at panel level runs its hooks for real. Split the component in two — an outer one that reads only atoms and returns `null` when the feature is inactive, and an inner one holding the chat/query hooks — so the provider is only needed when the feature is actually on screen. Mock the new child in the parent's suite the way its siblings already are.
+
+## Preview `postMessage` Tests Need an App URL
+
+Hooks that consume preview-iframe messages (e.g. `useTestRecorder`) validate `event.origin` against the running app's origin and **fail closed** when it isn't known. A `renderHook` test that only sets `previewIframeRefAtom` will therefore see every message silently dropped — with no error, because dropping a foreign message is the correct behavior.
+
+The app URL is **not** a Jotai atom: `appUrlByAppIdAtom` was retired (see `rules/jotai-state.md`, and the retired-name guard in `src/state_machines/boundaries.test.ts`), and the URL now comes from `useCurrentAppUrl` in `@/hooks/useAppRun`. Mock that hook, backing it with an atom of your own so a test can also take the URL away mid-session — which is what the dev-server restart during isolation setup does:
+
+```tsx
+const testAppUrlAtom = atom<AppUrlState>({
+  appUrl: null,
+  appId: null,
+  originalUrl: null,
+  mode: null,
+});
+vi.mock("@/hooks/useAppRun", () => ({
+  useCurrentAppUrl: () => useAtomValue(testAppUrlAtom),
+}));
+
+store.set(testAppUrlAtom, {
+  appUrl: "https://preview.test/",
+  appId: 1,
+  originalUrl: "https://preview.test/",
+  mode: "host",
+});
+```
+
+Then dispatch the `MessageEvent` with a matching origin:
+
+```tsx
+const event = new MessageEvent("message", {
+  data,
+  origin: "https://preview.test",
+});
+Object.defineProperty(event, "source", { value: iframe.contentWindow }); // read-only on the prototype
+```
+
+Have the iframe stand-in record the **target origin** each outgoing `postMessage` was given, not just the payload — a hook that sends credentials into the preview pins them to the app's origin, and a fake with a one-argument `postMessage` cannot tell that apart from a wide-open `"*"`. See `src/hooks/useTestRecorder.test.tsx` for the whole harness.
+
+## Partial `jotai` Mocks
+
+When a component test mocks `jotai`, preserve the real module exports with `importOriginal` and override only the needed hooks. A full mock that only returns `useAtomValue` can fail during test collection with `[vitest] No "atom" export is defined on the "jotai" mock` once an indirectly imported atom module calls `atom(...)`.
+
+## Seeding a running app URL
+
+Don't try to make a component see a running dev server by writing preview-runtime atoms on a test store — `@/atoms/previewRuntimeAtoms` was deleted (symptom: `Failed to resolve import "@/atoms/previewRuntimeAtoms"`). Mock the hook instead, as `PreviewPanel.test.tsx` and `TestsPanel.test.tsx` do:
+
+```ts
+vi.mock("@/hooks/useAppRun", () => ({
+  useCurrentAppUrl: () => ({
+    appUrl: "http://localhost:32100",
+    appId: 1,
+    originalUrl: "http://localhost:32100",
+    mode: "host" as const,
+  }),
+}));
+```

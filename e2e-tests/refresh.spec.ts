@@ -1,0 +1,228 @@
+import { testSkipIfWindows, Timeout } from "./helpers/test_helper";
+import { expect } from "@playwright/test";
+
+testSkipIfWindows("refresh app", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.sendPrompt("hi");
+
+  // Verify the preview content loads before we test refresh
+  await po.previewPanel.snapshotPreview();
+  const iframe = po.previewPanel.getPreviewIframeElement();
+
+  // Drop the document.body inside the contentFrame to make
+  // sure refresh works.
+  await iframe
+    .contentFrame()
+    .locator("body")
+    .evaluate((body) => {
+      body.remove();
+    });
+
+  await po.previewPanel.clickPreviewRefresh();
+
+  // Wait for the iframe to reload and have content after refresh.
+  // Use a short poll to ensure body has meaningful content before snapshotting.
+  await expect(
+    po.previewPanel.getPreviewIframeElement().contentFrame().locator("body"),
+  ).not.toHaveText("", { timeout: Timeout.LONG });
+
+  await po.previewPanel.snapshotPreview();
+});
+
+testSkipIfWindows("refresh preserves current route", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+
+  // Create a multi-page app with react-router navigation
+  await po.sendPrompt("tc=multi-page");
+
+  // Wait for the preview iframe to be visible and loaded
+  await po.previewPanel.expectPreviewIframeIsVisible();
+
+  // Wait for the Home Page content to be visible in the iframe
+  await expect(
+    po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByText("Home Page"),
+  ).toBeVisible({ timeout: Timeout.LONG });
+
+  // Click on the navigation link to go to /about (realistic user behavior)
+  await po.previewPanel
+    .getPreviewIframeElement()
+    .contentFrame()
+    .getByText("Go to About Page")
+    .click();
+
+  // Wait for the About Page content to be visible
+  await expect(
+    po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByText("About Page"),
+  ).toBeVisible({ timeout: Timeout.MEDIUM });
+
+  // Click refresh
+  await po.previewPanel.clickPreviewRefresh();
+
+  // Verify the route is preserved after refresh - About Page should still be visible
+  await expect(
+    po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByText("About Page"),
+  ).toBeVisible({ timeout: Timeout.MEDIUM });
+
+  // Wait to see if the page stays on About Page (reproducing local issue with HMR)
+  await po.page.waitForTimeout(5_000);
+
+  // Verify it's STILL on About Page after waiting - check that About Page heading is visible
+  // and the Home Page heading is not (use getByRole to match the heading, not the link text)
+  await expect(
+    po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByRole("heading", { name: "About Page" }),
+  ).toBeVisible({ timeout: Timeout.MEDIUM });
+  await expect(
+    po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByRole("heading", { name: "Home Page" }),
+  ).not.toBeVisible();
+});
+
+testSkipIfWindows(
+  "preview navigation - forward and back buttons work",
+  async ({ po }) => {
+    await po.setUp({ autoApprove: true });
+
+    // Create a multi-page app with react-router navigation
+    await po.sendPrompt("tc=multi-page");
+
+    // Wait for the preview iframe to be visible and loaded
+    await po.previewPanel.expectPreviewIframeIsVisible();
+
+    // Wait for the Home Page content to be visible in the iframe
+    await expect(
+      po.previewPanel
+        .getPreviewIframeElement()
+        .contentFrame()
+        .getByText("Home Page"),
+    ).toBeVisible({ timeout: Timeout.LONG });
+
+    // Verify back button is disabled initially (no history)
+    await expect(
+      po.page.getByTestId("preview-navigate-back-button"),
+    ).toBeDisabled();
+
+    // Click on the navigation link to go to /about
+    await po.previewPanel
+      .getPreviewIframeElement()
+      .contentFrame()
+      .getByText("Go to About Page")
+      .click();
+
+    // Wait for the About Page content to be visible
+    await expect(
+      po.previewPanel
+        .getPreviewIframeElement()
+        .contentFrame()
+        .getByRole("heading", { name: "About Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+
+    // Now back button should be enabled
+    await expect(
+      po.page.getByTestId("preview-navigate-back-button"),
+    ).toBeEnabled();
+
+    // Click back button to go back to Home Page
+    await po.previewPanel.clickPreviewNavigateBack();
+
+    // Verify we're back on Home Page
+    await expect(
+      po.previewPanel
+        .getPreviewIframeElement()
+        .contentFrame()
+        .getByRole("heading", { name: "Home Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+
+    // Now forward button should be enabled
+    await expect(
+      po.page.getByTestId("preview-navigate-forward-button"),
+    ).toBeEnabled();
+
+    // Click forward button to go back to About Page
+    await po.previewPanel.clickPreviewNavigateForward();
+
+    // Verify we're on About Page again
+    await expect(
+      po.previewPanel
+        .getPreviewIframeElement()
+        .contentFrame()
+        .getByRole("heading", { name: "About Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+  },
+);
+
+testSkipIfWindows(
+  "preview address bar accepts typed relative routes",
+  async ({ po }) => {
+    await po.setUp({ autoApprove: true });
+    await po.sendPrompt("tc=manual-preview-route");
+
+    await po.previewPanel.expectPreviewIframeIsVisible();
+
+    const iframe = po.previewPanel.getPreviewIframeElement();
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "Home Page" }),
+    ).toBeVisible({ timeout: Timeout.LONG });
+
+    await po.previewPanel.fillPreviewAddressBar("manual-only");
+
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "Manual Only Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+    await expect(po.previewPanel.getPreviewAddressBarInput()).toHaveValue(
+      "/manual-only",
+    );
+
+    await po.previewPanel.clickPreviewNavigateBack();
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "Home Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+    await expect(po.previewPanel.getPreviewAddressBarInput()).toHaveValue("/");
+
+    await po.previewPanel.clickPreviewNavigateForward();
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "Manual Only Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+    await expect(po.previewPanel.getPreviewAddressBarInput()).toHaveValue(
+      "/manual-only",
+    );
+  },
+);
+
+testSkipIfWindows(
+  "spa navigation inside iframe does not change iframe src attribute",
+  async ({ po }) => {
+    await po.setUp({ autoApprove: true });
+    await po.sendPrompt("tc=multi-page");
+
+    await po.previewPanel.expectPreviewIframeIsVisible();
+
+    const iframe = po.previewPanel.getPreviewIframeElement();
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "Home Page" }),
+    ).toBeVisible({ timeout: Timeout.LONG });
+
+    const srcBeforeNavigation = await iframe.getAttribute("src");
+
+    await iframe.contentFrame().getByText("Go to About Page").click();
+    await expect(
+      iframe.contentFrame().getByRole("heading", { name: "About Page" }),
+    ).toBeVisible({ timeout: Timeout.MEDIUM });
+
+    const srcAfterNavigation = await iframe.getAttribute("src");
+    expect(srcAfterNavigation).toBe(srcBeforeNavigation);
+  },
+);

@@ -1,0 +1,235 @@
+import { db } from "../../db";
+import { chats } from "../../db/schema";
+import { eq } from "drizzle-orm";
+import {
+  constructSystemPrompt,
+  readAiRules,
+} from "../../prompts/system_prompt";
+import { getThemePromptById } from "../utils/theme_utils";
+import {
+  getSupabaseAvailableSystemPrompt,
+  SUPABASE_NOT_AVAILABLE_SYSTEM_PROMPT,
+} from "../../prompts/supabase_prompt";
+import { buildNeonPromptForApp } from "../../neon_admin/neon_prompt_context";
+import {
+  getChatProjectRootPath,
+  getOctopusStudioAppPath,
+} from "../../paths/paths";
+import { detectFrameworkType } from "../utils/framework_utils";
+import log from "electron-log";
+import { extractCodebase } from "../../utils/codebase";
+import {
+  getSupabaseContext,
+  getSupabaseClientCode,
+} from "../../supabase_admin/supabase_context";
+
+import { TokenCountParams, TokenCountResult } from "@/ipc/types";
+import { estimateTokens, getContextWindow } from "../utils/token_utils";
+import { createLoggedHandler } from "./safe_handle";
+import { validateChatContext } from "../utils/context_paths_utils";
+import { readSettings } from "@/main/settings";
+import {
+  normalizeModelSelection,
+  resolveDefaultModelSelection,
+} from "@/ipc/utils/model_effort";
+import { extractMentionedAppsCodebasesFromPrompt } from "../utils/mention_apps";
+import { isLocalAgentBackedMode, isTurboEditsV2Enabled } from "@/lib/schemas";
+import {
+  OctopusStudioError,
+  OctopusStudioErrorKind,
+} from "@/errors/octopus_studio_error";
+import { resolveChatModeForTurn } from "./chat_mode_resolution";
+
+const logger = log.scope("token_count_handlers");
+
+const handle = createLoggedHandler(logger);
+
+export function registerTokenCountHandlers() {
+  handle(
+    "chat:count-tokens",
+    async (event, req: TokenCountParams): Promise<TokenCountResult> => {
+      const chat = await db.query.chats.findFirst({
+        where: eq(chats.id, req.chatId),
+        with: {
+          messages: {
+            orderBy: (messages, { asc }) => [
+              asc(messages.createdAt),
+              asc(messages.id),
+            ],
+          },
+          app: true,
+        },
+      });
+
+      if (!chat) {
+        throw new OctopusStudioError(
+          `Chat not found: ${req.chatId}`,
+          OctopusStudioErrorKind.NotFound,
+        );
+      }
+
+      // Prepare message history for token counting
+      const messageHistory = chat.messages
+        .map((message) => message.content)
+        .join("");
+      const messageHistoryTokens = estimateTokens(messageHistory);
+
+      // Count input tokens
+      const inputTokens = estimateTokens(req.input);
+
+      const storedSettings = readSettings();
+      const selectedModel = chat.modelSelection
+        ? await normalizeModelSelection(chat.modelSelection)
+        : await resolveDefaultModelSelection(storedSettings);
+      const { mode: selectedChatMode } = await resolveChatModeForTurn({
+        storedChatMode: chat.chatMode,
+        settings: { ...storedSettings, selectedModel },
+      });
+      const settings = {
+        ...storedSettings,
+        selectedModel,
+        selectedChatMode,
+      };
+
+      // Count system prompt tokens
+      // Migration on read converts "agent" to "build", so no need to check for it here
+      const themePrompt = await getThemePromptById(chat.app?.themeId ?? null);
+      // Chat projects resolve their workspace folder (not the base apps dir
+      // that `getOctopusStudioAppPath("")` would point at) for AI rules and framework.
+      const appPath =
+        chat.app?.type === "chat"
+          ? getChatProjectRootPath(chat.app.directory, chat.app.id)
+          : getOctopusStudioAppPath(chat.app.path);
+      const frameworkType = detectFrameworkType(appPath);
+      let systemPrompt = constructSystemPrompt({
+        aiRules: await readAiRules(appPath),
+        chatMode:
+          selectedChatMode === "local-agent" ? "build" : selectedChatMode,
+        enableTurboEditsV2: isTurboEditsV2Enabled(settings),
+        themePrompt,
+        frameworkType,
+        hasSupabaseProject: !!chat.app?.supabaseProjectId,
+        testingEnabled: !!chat.app?.testingEnabled,
+        economyMode: !!settings.economyMode,
+      });
+      let supabaseContext = "";
+
+      if (chat.app?.supabaseProjectId) {
+        const supabaseClientCode = await getSupabaseClientCode({
+          projectId: chat.app.supabaseProjectId,
+          organizationSlug: chat.app.supabaseOrganizationSlug ?? null,
+        });
+        systemPrompt +=
+          "\n\n" + getSupabaseAvailableSystemPrompt(supabaseClientCode);
+        supabaseContext = await getSupabaseContext({
+          supabaseProjectId: chat.app.supabaseProjectId,
+          organizationSlug: chat.app.supabaseOrganizationSlug ?? null,
+        });
+      } else if (chat.app?.neonProjectId) {
+        systemPrompt +=
+          "\n\n" +
+          (await buildNeonPromptForApp({
+            appPath: chat.app.path,
+            neonProjectId: chat.app.neonProjectId!,
+            neonActiveBranchId: chat.app.neonActiveBranchId,
+            neonDevelopmentBranchId: chat.app.neonDevelopmentBranchId,
+            selectedChatMode,
+          }));
+      } else {
+        // Neon projects don't need Supabase (already handled above).
+        systemPrompt += "\n\n" + SUPABASE_NOT_AVAILABLE_SYSTEM_PROMPT;
+      }
+
+      const systemPromptTokens = estimateTokens(systemPrompt + supabaseContext);
+
+      // Extract codebase information if app is associated with the chat
+      let codebaseInfo = "";
+      let codebaseTokens = 0;
+
+      if (chat.app && chat.app.type !== "chat") {
+        const appPath = getOctopusStudioAppPath(chat.app.path);
+        const { formattedOutput, files } = await extractCodebase({
+          appPath,
+          chatContext: validateChatContext(chat.app.chatContext),
+        });
+        codebaseInfo = formattedOutput;
+        if (
+          settings.enableOctopusStudioPro &&
+          settings.enableProSmartFilesContextMode
+        ) {
+          codebaseTokens = estimateTokens(
+            files
+              // It doesn't need to be the exact format but it's just to get a token estimate
+              .map(
+                (file) =>
+                  `<octopus-studio-file=${file.path}>${file.content}</octopus-studio-file>`,
+              )
+              .join("\n\n"),
+          );
+        } else {
+          codebaseTokens = estimateTokens(codebaseInfo);
+        }
+        logger.debug(
+          `Extracted codebase information from ${appPath}, tokens: ${codebaseTokens}`,
+        );
+      }
+
+      // Agent/ask/plan modes reach referenced apps via tool calls rather than
+      // injecting full codebases into the prompt, so mentioned apps contribute
+      // ~0 tokens upfront. Match the extraction behavior in chat_stream_handlers
+      // so the UI estimate tracks what's actually sent.
+      const willUseLocalAgentStream = isLocalAgentBackedMode(
+        settings.selectedChatMode,
+      );
+
+      let mentionedAppsTokens = 0;
+      if (!willUseLocalAgentStream) {
+        const mentionedAppsCodebases =
+          await extractMentionedAppsCodebasesFromPrompt(
+            req.input,
+            chat.app?.id, // Exclude current app
+          );
+
+        if (mentionedAppsCodebases.length > 0) {
+          const mentionedAppsContent = mentionedAppsCodebases
+            .map(
+              ({ appName, codebaseInfo }) =>
+                `\n\n=== Referenced App: ${appName} ===\n${codebaseInfo}`,
+            )
+            .join("");
+
+          mentionedAppsTokens = estimateTokens(mentionedAppsContent);
+
+          logger.debug(
+            `Extracted ${mentionedAppsCodebases.length} mentioned app codebases, tokens: ${mentionedAppsTokens}`,
+          );
+        }
+      }
+
+      // Calculate total tokens
+      const totalTokens =
+        messageHistoryTokens +
+        inputTokens +
+        systemPromptTokens +
+        codebaseTokens +
+        mentionedAppsTokens;
+
+      // Find the last assistant message since totalTokens is only set on assistant messages
+      const lastAssistantMessage = [...chat.messages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      const actualMaxTokens = lastAssistantMessage?.maxTokensUsed ?? null;
+
+      return {
+        estimatedTotalTokens: totalTokens,
+        actualMaxTokens,
+        messageHistoryTokens,
+        codebaseTokens,
+        mentionedAppsTokens,
+        inputTokens,
+        systemPromptTokens,
+        contextWindow: await getContextWindow(selectedModel),
+      };
+    },
+  );
+}

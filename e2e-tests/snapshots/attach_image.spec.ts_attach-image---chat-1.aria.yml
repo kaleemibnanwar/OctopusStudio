@@ -1,0 +1,13 @@
+- button "Restore to this point"
+- paragraph: basic
+- button "file1.txt file1.txt Edit"
+- paragraph: More EOM
+- button "Copy"
+- text: "[[Version 2: files changed]]"
+- button "Restore to this point"
+- paragraph: "[dump]"
+- 'button "Expand image: logo.png"'
+- paragraph: "[[octopus-studio-dump-path=*]]"
+- button "Copy"
+- button "Undo"
+- button "Retry"

@@ -1,0 +1,729 @@
+/**
+ * Handler for Local Agent E2E testing fixtures
+ * Manages multi-turn tool call conversations
+ */
+
+import { Request, Response } from "express";
+import crypto from "crypto";
+import path from "path";
+import fs from "fs";
+import type { LocalAgentFixture, Turn } from "./localAgentTypes";
+import { resolveFixturesDir } from "./paths";
+import { fakeLlmLog } from "./log";
+
+// Register ts-node to allow loading .ts fixture files directly
+try {
+  require("ts-node/register");
+} catch {
+  // ts-node not available, will fall back to .js files
+}
+
+// Map of session ID -> current turn index
+
+// Cache loaded fixtures to avoid re-importing
+const fixtureCache = new Map<string, LocalAgentFixture>();
+
+// Track connection attempts per session+turn for connection drop simulation.
+// Key: `${sessionId}-${passIndex}-${turnIndex}`, Value: attempt count
+const connectionAttempts = new Map<string, number>();
+
+function normalizeFixtureText(text: string): string {
+  return text.replace(/\r\n/g, "\n");
+}
+
+/**
+ * Generate a session ID from the first user message
+ * This allows us to track conversation state across requests
+ */
+function getSessionId(messages: any[]): string {
+  // Find the first user message to use as session identifier
+  const firstUserMsg = messages.find((m) => m.role === "user");
+  if (!firstUserMsg) {
+    return crypto.randomUUID();
+  }
+  return crypto
+    .createHash("md5")
+    .update(JSON.stringify(firstUserMsg))
+    .digest("hex");
+}
+
+/**
+ * Check if a message content contains a todo reminder pattern.
+ * The todo reminder is injected by the outer loop when there are incomplete todos.
+ */
+function isTodoReminderMessage(msg: any): boolean {
+  if (msg?.role !== "user") return false;
+  const content = Array.isArray(msg.content)
+    ? msg.content.find((p: any) => p.type === "text")?.text
+    : typeof msg.content === "string"
+      ? msg.content
+      : null;
+  // Note: This magic string must match the reminder text in prepare_step_utils.ts
+  // buildTodoReminderMessage(). Update both if the text changes.
+  return content?.includes("incomplete todo(s)") ?? false;
+}
+
+function isToolResultMessage(msg: any): boolean {
+  if (msg?.role === "tool") {
+    return true;
+  }
+  return (
+    Array.isArray(msg?.content) &&
+    msg.content.some(
+      (p: any) => p.type === "tool-result" || p.type === "tool_result",
+    )
+  );
+}
+
+/**
+ * Count the number of todo reminder messages in the conversation.
+ * This determines which outer loop pass we're on.
+ */
+function countTodoReminderMessages(messages: any[]): number {
+  return messages.filter(isTodoReminderMessage).length;
+}
+
+/**
+ * Count the number of tool result messages AFTER the last user message
+ * to determine which turn we're on for the current fixture.
+ * This ensures each new user prompt (fixture trigger) starts fresh at turn 0.
+ */
+function countToolResultRounds(messages: any[]): number {
+  // Find the index of the last user prompt. Anthropic encodes tool results as
+  // user messages, so skip those or every tool-result follow-up resets to turn 0.
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user" && !isToolResultMessage(messages[i])) {
+      lastUserIndex = i;
+      break;
+    }
+  }
+
+  // Count tool results only after the last user message
+  let rounds = 0;
+  for (let i = lastUserIndex + 1; i < messages.length; i++) {
+    const msg = messages[i];
+    if (isToolResultMessage(msg)) {
+      rounds++;
+    }
+  }
+  return rounds;
+}
+
+/**
+ * Extract the attachment path from the last user message.
+ * The user message format includes: "path: /path/to/app/.octopusStudio/media/hash.png"
+ */
+function extractAttachmentPath(messages: any[]): string | null {
+  // Search from the end to find the most recent user message with an attachment path
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "user") continue;
+    const text = Array.isArray(msg.content)
+      ? msg.content.find((p: any) => p.type === "text")?.text
+      : typeof msg.content === "string"
+        ? msg.content
+        : null;
+    if (!text) continue;
+    const match = text.match(/\(path: ([^\s)]+)\)/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Load a fixture file dynamically
+ * Tries .ts first (for dev mode with ts-node), then .js
+ */
+async function loadFixture(fixtureName: string): Promise<LocalAgentFixture> {
+  if (fixtureCache.has(fixtureName)) {
+    return fixtureCache.get(fixtureName)!;
+  }
+
+  const fixtureDir = path.join(resolveFixturesDir(), "engine", "local-agent");
+
+  // Try .ts first, then .js
+  let fixturePath = path.join(fixtureDir, `${fixtureName}.ts`);
+  if (!fs.existsSync(fixturePath)) {
+    fixturePath = path.join(fixtureDir, `${fixtureName}.js`);
+  }
+
+  try {
+    // Clear require cache to allow fixture updates during development
+    delete require.cache[require.resolve(fixturePath)];
+    const module = require(fixturePath);
+    const fixture = module.fixture as LocalAgentFixture;
+
+    if (!fixture || (!fixture.turns && !fixture.passes)) {
+      throw new Error(
+        `Invalid fixture: missing 'fixture' export or 'turns'/'passes' array`,
+      );
+    }
+
+    fixtureCache.set(fixtureName, fixture);
+    return fixture;
+  } catch (error) {
+    console.error(`Failed to load fixture: ${fixturePath}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get the turns for the current pass from a fixture.
+ * Supports both simple fixtures (with `turns`) and multi-pass fixtures (with `passes`).
+ */
+function getTurnsForPass(
+  fixture: LocalAgentFixture,
+  passIndex: number,
+): Turn[] {
+  // If fixture uses passes, get the appropriate pass
+  if (fixture.passes && fixture.passes.length > 0) {
+    if (passIndex >= fixture.passes.length) {
+      // All passes exhausted
+      return [];
+    }
+    return fixture.passes[passIndex].turns;
+  }
+
+  // Simple fixture with turns - only valid for pass 0
+  if (passIndex > 0) {
+    return [];
+  }
+  return fixture.turns || [];
+}
+
+/**
+ * Create a streaming chunk in OpenAI format
+ */
+function createStreamChunk(
+  content: string,
+  role: string = "assistant",
+  isLast: boolean = false,
+  finishReason: string | null = null,
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  },
+) {
+  const chunk: any = {
+    id: `chatcmpl-${Date.now()}`,
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: "fake-local-agent-model",
+    choices: [
+      {
+        index: 0,
+        delta: isLast ? {} : { content, role },
+        finish_reason: finishReason,
+      },
+    ],
+  };
+  if (isLast && usage) {
+    chunk.usage = usage;
+  }
+  return `data: ${JSON.stringify(chunk)}\n\n${isLast ? "data: [DONE]\n\n" : ""}`;
+}
+
+/**
+ * Stream a text-only turn response
+ */
+async function streamTextResponse(
+  res: Response,
+  text: string,
+  usage?: Turn["usage"],
+  protocol: "openai" | "anthropic" = "openai",
+) {
+  text = normalizeFixtureText(text);
+
+  if (protocol === "anthropic") {
+    await streamAnthropicTextResponse(res, text, usage);
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  // Send role first
+  res.write(createStreamChunk("", "assistant"));
+
+  // Stream text in batches
+  const batchSize = 32;
+  for (let i = 0; i < text.length; i += batchSize) {
+    const batch = text.slice(i, i + batchSize);
+    res.write(createStreamChunk(batch));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  // Send final chunk
+  res.write(createStreamChunk("", "assistant", true, "stop", usage));
+  res.end();
+}
+
+/**
+ * Stream a turn with tool calls
+ */
+async function streamToolCallResponse(
+  res: Response,
+  turn: Turn,
+  options?: {
+    dropAfterToolCalls?: boolean;
+    protocol?: "openai" | "anthropic";
+  },
+) {
+  if (options?.protocol === "anthropic") {
+    await streamAnthropicToolCallResponse(res, turn, {
+      dropAfterToolCalls: options.dropAfterToolCalls,
+    });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const now = Date.now();
+  const mkChunk = (delta: any, finish: string | null = null) => {
+    const chunk = {
+      id: `chatcmpl-${now}`,
+      object: "chat.completion.chunk",
+      created: Math.floor(now / 1000),
+      model: "fake-local-agent-model",
+      choices: [
+        {
+          index: 0,
+          delta,
+          finish_reason: finish,
+        },
+      ],
+    };
+    return `data: ${JSON.stringify(chunk)}\n\n`;
+  };
+
+  // 1) Send role
+  res.write(mkChunk({ role: "assistant" }));
+
+  // 2) Send text content if any
+  if (turn.text) {
+    const text = normalizeFixtureText(turn.text);
+    const batchSize = 32;
+    for (let i = 0; i < text.length; i += batchSize) {
+      const batch = text.slice(i, i + batchSize);
+      res.write(mkChunk({ content: batch }));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  // 3) Send tool calls
+  if (turn.toolCalls && turn.toolCalls.length > 0) {
+    for (let idx = 0; idx < turn.toolCalls.length; idx++) {
+      const toolCall = turn.toolCalls[idx];
+      const toolCallId = `call_${now}_${idx}`;
+
+      // Send tool call init with id + name + empty args
+      res.write(
+        mkChunk({
+          tool_calls: [
+            {
+              index: idx,
+              id: toolCallId,
+              type: "function",
+              function: {
+                name: toolCall.name,
+                arguments: "",
+              },
+            },
+          ],
+        }),
+      );
+
+      // Stream arguments gradually
+      const args = JSON.stringify(toolCall.args);
+      const argBatchSize = 20;
+      for (let i = 0; i < args.length; i += argBatchSize) {
+        const part = args.slice(i, i + argBatchSize);
+        res.write(
+          mkChunk({
+            tool_calls: [{ index: idx, function: { arguments: part } }],
+          }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    }
+  }
+
+  if (options?.dropAfterToolCalls) {
+    fakeLlmLog(
+      `[local-agent] Simulating connection drop after streaming tool calls`,
+    );
+    // Drop before finish_reason/[DONE] so tool calls were emitted but the
+    // provider response did not complete.
+    res.socket?.destroy();
+    return;
+  }
+
+  // 4) Send finish (with optional usage data)
+  const finishReason =
+    turn.toolCalls && turn.toolCalls.length > 0 ? "tool_calls" : "stop";
+  const finishChunk: any = {
+    id: `chatcmpl-${now}`,
+    object: "chat.completion.chunk",
+    created: Math.floor(now / 1000),
+    model: "fake-local-agent-model",
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: finishReason,
+      },
+    ],
+  };
+  if (turn.usage) {
+    finishChunk.usage = turn.usage;
+  }
+  res.write(`data: ${JSON.stringify(finishChunk)}\n\n`);
+
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
+function writeAnthropicEvent(res: Response, event: string, data: any) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function startAnthropicStream(res: Response, usage?: Turn["usage"]) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  writeAnthropicEvent(res, "message_start", {
+    type: "message_start",
+    message: {
+      id: `msg_${Date.now()}`,
+      type: "message",
+      role: "assistant",
+      model: "fake-local-agent-model",
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      usage: {
+        input_tokens: usage?.prompt_tokens ?? 1,
+        output_tokens: 0,
+      },
+    },
+  });
+}
+
+async function streamAnthropicTextBlock(
+  res: Response,
+  index: number,
+  text: string,
+) {
+  text = normalizeFixtureText(text);
+
+  writeAnthropicEvent(res, "content_block_start", {
+    type: "content_block_start",
+    index,
+    content_block: { type: "text", text: "" },
+  });
+  const batchSize = 32;
+  for (let i = 0; i < text.length; i += batchSize) {
+    const batch = text.slice(i, i + batchSize);
+    writeAnthropicEvent(res, "content_block_delta", {
+      type: "content_block_delta",
+      index,
+      delta: { type: "text_delta", text: batch },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  writeAnthropicEvent(res, "content_block_stop", {
+    type: "content_block_stop",
+    index,
+  });
+}
+
+function finishAnthropicStream(
+  res: Response,
+  stopReason: "end_turn" | "tool_use",
+  usage?: Turn["usage"],
+) {
+  writeAnthropicEvent(res, "message_delta", {
+    type: "message_delta",
+    delta: { stop_reason: stopReason, stop_sequence: null },
+    usage: {
+      input_tokens: usage?.prompt_tokens ?? 1,
+      output_tokens: usage?.completion_tokens ?? 1,
+    },
+  });
+  writeAnthropicEvent(res, "message_stop", { type: "message_stop" });
+  res.end();
+}
+
+async function streamAnthropicTextResponse(
+  res: Response,
+  text: string,
+  usage?: Turn["usage"],
+) {
+  startAnthropicStream(res, usage);
+  await streamAnthropicTextBlock(res, 0, text);
+  finishAnthropicStream(res, "end_turn", usage);
+}
+
+async function streamAnthropicToolCallResponse(
+  res: Response,
+  turn: Turn,
+  options?: { dropAfterToolCalls?: boolean },
+) {
+  startAnthropicStream(res, turn.usage);
+
+  let blockIndex = 0;
+  if (turn.text) {
+    await streamAnthropicTextBlock(res, blockIndex++, turn.text);
+  }
+
+  if (turn.toolCalls && turn.toolCalls.length > 0) {
+    for (let idx = 0; idx < turn.toolCalls.length; idx++) {
+      const toolCall = turn.toolCalls[idx];
+      const toolCallId = `call_${Date.now()}_${idx}`;
+      writeAnthropicEvent(res, "content_block_start", {
+        type: "content_block_start",
+        index: blockIndex,
+        content_block: {
+          type: "tool_use",
+          id: toolCallId,
+          name: toolCall.name,
+          input: {},
+        },
+      });
+
+      const args = JSON.stringify(toolCall.args);
+      const argBatchSize = 20;
+      for (let i = 0; i < args.length; i += argBatchSize) {
+        const part = args.slice(i, i + argBatchSize);
+        writeAnthropicEvent(res, "content_block_delta", {
+          type: "content_block_delta",
+          index: blockIndex,
+          delta: { type: "input_json_delta", partial_json: part },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+
+      writeAnthropicEvent(res, "content_block_stop", {
+        type: "content_block_stop",
+        index: blockIndex,
+      });
+      blockIndex++;
+    }
+  }
+
+  if (options?.dropAfterToolCalls) {
+    fakeLlmLog(
+      `[local-agent] Simulating Anthropic connection drop after streaming tool calls`,
+    );
+    res.socket?.destroy();
+    return;
+  }
+
+  finishAnthropicStream(
+    res,
+    turn.toolCalls && turn.toolCalls.length > 0 ? "tool_use" : "end_turn",
+    turn.usage,
+  );
+}
+
+/**
+ * Handle a local-agent fixture request
+ */
+export async function handleLocalAgentFixture(
+  req: Request,
+  res: Response,
+  fixtureName: string,
+  options: { protocol?: "openai" | "anthropic" } = {},
+): Promise<void> {
+  const { messages = [] } = req.body;
+  const protocol = options.protocol ?? "openai";
+
+  fakeLlmLog(`[local-agent] Loading fixture: ${fixtureName}`);
+  fakeLlmLog(`[local-agent] Messages count: ${messages.length}`);
+
+  try {
+    const fixture = await loadFixture(fixtureName);
+    const sessionId = getSessionId(messages);
+
+    // Determine which outer loop pass we're on based on todo reminder messages
+    const passIndex = countTodoReminderMessages(messages);
+
+    // Determine which turn we're on within the current pass
+    const toolResultRounds = countToolResultRounds(messages);
+    const turnIndex = toolResultRounds;
+
+    // Get the turns for the current pass
+    const turns = getTurnsForPass(fixture, passIndex);
+
+    fakeLlmLog(
+      `[local-agent] Loaded fixture: ${fixtureName}, Session: ${sessionId}, Pass: ${passIndex}, Turn: ${turnIndex}, Tool rounds: ${toolResultRounds}`,
+    );
+
+    if (turnIndex >= turns.length) {
+      // All turns exhausted for this pass, send a simple completion message
+      fakeLlmLog(
+        `[local-agent] All turns exhausted for pass ${passIndex}, sending completion`,
+      );
+      await streamTextResponse(res, "Task completed.", undefined, protocol);
+      return;
+    }
+
+    let turn = turns[turnIndex];
+    fakeLlmLog(
+      `[local-agent] Executing pass ${passIndex}, turn ${turnIndex}:`,
+      {
+        hasText: !!turn.text,
+        toolCallCount: turn.toolCalls?.length ?? 0,
+      },
+    );
+
+    // Replace {{ATTACHMENT_PATH}} placeholders in tool call args
+    // with the actual path extracted from the user message
+    if (turn.toolCalls) {
+      const attachmentPath = extractAttachmentPath(messages);
+      if (attachmentPath) {
+        turn = {
+          ...turn,
+          toolCalls: turn.toolCalls.map((tc) => ({
+            ...tc,
+            args: JSON.parse(
+              JSON.stringify(tc.args).replace(
+                /\{\{ATTACHMENT_PATH\}\}/g,
+                JSON.stringify(attachmentPath).slice(1, -1),
+              ),
+            ),
+          })),
+        };
+      }
+    }
+
+    // Check if we should simulate a connection drop for this attempt
+    const turnScopedDropAttempts =
+      fixture.dropConnectionByTurn?.find((rule) => rule.turnIndex === turnIndex)
+        ?.attempts ?? fixture.dropConnectionOnAttempts;
+    const turnScopedDropAfterToolCallAttempts =
+      fixture.dropConnectionAfterToolCallByTurn?.find(
+        (rule) => rule.turnIndex === turnIndex,
+      )?.attempts;
+
+    if (turnScopedDropAttempts && turnScopedDropAttempts.length > 0) {
+      const attemptKey = `${sessionId}-${passIndex}-${turnIndex}`;
+      const currentAttempt = (connectionAttempts.get(attemptKey) || 0) + 1;
+      connectionAttempts.set(attemptKey, currentAttempt);
+
+      fakeLlmLog(
+        `[local-agent] Connection attempt ${currentAttempt} for ${attemptKey}, ` +
+          `drop on: [${turnScopedDropAttempts.join(", ")}]`,
+      );
+
+      if (turnScopedDropAttempts.includes(currentAttempt)) {
+        fakeLlmLog(
+          `[local-agent] Simulating connection drop on attempt ${currentAttempt}`,
+        );
+        // Stream partial data then destroy the socket to simulate a network interruption
+        if (protocol === "anthropic") {
+          startAnthropicStream(res);
+          writeAnthropicEvent(res, "content_block_start", {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          });
+          writeAnthropicEvent(res, "content_block_delta", {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "text_delta",
+              text: "Partial response before connection dr",
+            },
+          });
+        } else {
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          res.write(
+            createStreamChunk(
+              "Partial response before connection dr",
+              "assistant",
+            ),
+          );
+        }
+        // Destroy the underlying socket to trigger a "terminated" error on the client
+        res.socket?.destroy();
+        return;
+      }
+    }
+
+    // Optional delay so tests can cancel the stream while it is still open.
+    // Abort the wait as soon as the client disconnects so the timer doesn't
+    // keep the event loop alive (delaying test teardown) and we don't later
+    // try to write to a closed response (ERR_STREAM_WRITE_AFTER_END / EPIPE).
+    if (turn.delayMs && turn.delayMs > 0) {
+      let aborted = false;
+      await new Promise<void>((resolve) => {
+        const onClose = () => {
+          aborted = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          req.removeListener("close", onClose);
+          resolve();
+        }, turn.delayMs);
+        req.once("close", onClose);
+      });
+      if (aborted || req.destroyed) {
+        return;
+      }
+    }
+
+    // If this turn has tool calls, stream them
+    if (turn.toolCalls && turn.toolCalls.length > 0) {
+      const dropAfterToolCalls =
+        turnScopedDropAfterToolCallAttempts &&
+        turnScopedDropAfterToolCallAttempts.length > 0
+          ? (() => {
+              const attemptKey = `${sessionId}-${passIndex}-${turnIndex}-after-tool-call`;
+              const currentAttempt =
+                (connectionAttempts.get(attemptKey) || 0) + 1;
+              connectionAttempts.set(attemptKey, currentAttempt);
+              return turnScopedDropAfterToolCallAttempts.includes(
+                currentAttempt,
+              );
+            })()
+          : false;
+
+      await streamToolCallResponse(res, turn, {
+        dropAfterToolCalls,
+        protocol,
+      });
+    } else {
+      // Text-only turn
+      await streamTextResponse(res, turn.text || "Done.", turn.usage, protocol);
+    }
+  } catch (error) {
+    console.error(`[local-agent] Error handling fixture:`, error);
+    res.status(500).json({
+      error: {
+        message: `Failed to load fixture: ${fixtureName}`,
+        type: "server_error",
+      },
+    });
+  }
+}
+
+/**
+ * Check if a message content matches a local-agent fixture pattern
+ * Returns the fixture name if matched, null otherwise
+ */
+export function extractLocalAgentFixture(content: string): string | null {
+  if (!content) return null;
+  // Match tc=local-agent/FIXTURE_NAME, allowing trailing whitespace
+  const match = content.trim().match(/^tc=local-agent\/([^\s[]+)/);
+  return match ? match[1] : null;
+}

@@ -1,0 +1,59 @@
+===
+role: system
+message: [[SYSTEM_MESSAGE]]
+
+===
+role: user
+message: This is my codebase. <octopus-studio-file path="src/pages/Index.tsx">
+// Update this page (the content is just a fallback if you fail to update the page)
+
+import { MadeWithOctopusStudio } from "@/components/made-with-octopus-studio";
+
+const Index = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
+        <p className="text-xl text-gray-600">
+          Start building your amazing project here!
+        </p>
+      </div>
+      <MadeWithOctopusStudio />
+    </div>
+  );
+};
+
+export default Index;
+
+</octopus-studio-file>
+
+
+
+===
+role: assistant
+message: OK, got it. I'm ready to help
+
+===
+role: user
+message: tc=basic
+
+===
+role: assistant
+message: This is a simple basic response
+
+===
+role: user
+message: [dump] make it smaller
+
+Selected components:
+
+Component: h1 (file: src/pages/Index.tsx)
+
+Snippet:
+```
+      <div className="text-center">
+        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1> // <-- EDIT HERE
+        <p className="text-xl text-gray-600">
+          Start building your amazing project here!
+        </p>
+```

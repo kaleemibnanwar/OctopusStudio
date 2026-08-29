@@ -1,0 +1,373 @@
+import { test, Timeout } from "./helpers/test_helper";
+import { expect } from "@playwright/test";
+import path from "node:path";
+
+test("tabs appear after navigating between chats", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1
+  await po.sendPrompt("[dump] build a todo app");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] build a weather app");
+  await po.chatActions.waitForChatCompletion();
+
+  // At least one tab should be visible (tabs render once there are recent chats).
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("restores previously open tabs after reload", async ({
+  po,
+  electronApp,
+}) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  await po.sendPrompt("[dump] Restore tab one");
+  await po.chatActions.waitForChatCompletion();
+
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Restore tab two");
+  await po.chatActions.waitForChatCompletion();
+
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  const appPath = await electronApp.evaluate(({ app }) => app.getAppPath());
+  const rendererIndexPath = path.join(
+    appPath,
+    ".vite/renderer/main_window/index.html",
+  );
+  await electronApp.evaluate(async ({ BrowserWindow }, rendererIndexPath) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    try {
+      await window.loadFile(rendererIndexPath);
+    } catch (error) {
+      // TanStack Router restores the persisted /chat route while the renderer
+      // reload is still settling, so Electron can report the superseded index
+      // navigation as ERR_ABORTED even though the routed page loaded correctly.
+      if (!(error instanceof Error) || !error.message.includes("(-3)")) {
+        throw error;
+      }
+    }
+  }, rendererIndexPath);
+  await po.page.waitForLoadState("domcontentloaded");
+
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(2);
+  }).toPass({ timeout: Timeout.EXTRA_LONG });
+
+  await expect(po.page.getByText("Restore tab two")).toBeVisible({
+    timeout: Timeout.MEDIUM,
+  });
+});
+
+test("clicking a tab switches to that chat", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1 - send a unique message
+  await po.sendPrompt("First chat unique message alpha");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2 - send a different unique message
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("Second chat unique message beta");
+  await po.chatActions.waitForChatCompletion();
+
+  // Wait for at least 2 tabs to appear
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // We're on chat 2 (active). Find and click the inactive tab to switch to chat 1.
+  // Each tab is a div[draggable] with a title button + close button. The active tab's title button has aria-current="page".
+  const inactiveTab = po.page
+    .locator("div[draggable]")
+    .filter({ hasNot: po.page.locator('button[aria-current="page"]') });
+  await inactiveTab.locator("button").first().click();
+
+  // After clicking, chat 1's message should be visible
+  await expect(
+    po.page.getByText("First chat unique message alpha"),
+  ).toBeVisible({ timeout: Timeout.MEDIUM });
+});
+
+test("closing a tab removes it and selects adjacent tab", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1
+  await po.sendPrompt("First chat message gamma");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("Second chat message delta");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 3 (currently active)
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("Third chat message epsilon");
+  await po.chatActions.waitForChatCompletion();
+
+  // Wait for tabs to appear
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  const initialCount = await (async () => {
+    let count = 0;
+    await expect(async () => {
+      count = await closeButtons.count();
+      expect(count).toBeGreaterThanOrEqual(2);
+    }).toPass({ timeout: Timeout.MEDIUM });
+    return count;
+  })();
+
+  // Close the first tab.
+  await po.page
+    .getByLabel(/^Close tab:/)
+    .first()
+    .click();
+
+  // After closing, tab count should decrease.
+  await expect(async () => {
+    const newCount = await closeButtons.count();
+    expect(newCount).toBe(initialCount - 1);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("right-click context menu: Close other tabs", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1
+  await po.sendPrompt("[dump] Chat one context menu");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Chat two context menu");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 3
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Chat three context menu");
+  await po.chatActions.waitForChatCompletion();
+
+  // Wait for 3 tabs to appear
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(3);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Right-click on the second tab to open context menu
+  const tabs = po.page.locator("div[draggable]");
+  await tabs.nth(1).click({ button: "right" });
+
+  // Click "Close other tabs" from context menu
+  await po.page.getByText("Close other tabs").click();
+
+  // After closing other tabs, only 1 tab should remain
+  await expect(async () => {
+    const newCount = await closeButtons.count();
+    expect(newCount).toBe(1);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("right-click context menu: Close tabs to the right", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1
+  await po.sendPrompt("[dump] Left tab one");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Left tab two");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 3
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Right tab one");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 4
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Right tab two");
+  await po.chatActions.waitForChatCompletion();
+
+  // Wait for the tabs to appear; one may overflow depending on viewport width.
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBeGreaterThanOrEqual(3);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Right-click on the second tab (index 1) to open context menu
+  const tabs = po.page.locator("div[draggable]");
+  await tabs.nth(1).click({ button: "right" });
+
+  // Click "Close tabs to the right" from context menu
+  await po.page.getByText("Close tabs to the right").click();
+
+  // After closing tabs to the right, only 2 tabs should remain (first and second)
+  await expect(async () => {
+    const newCount = await closeButtons.count();
+    expect(newCount).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("right-click context menu: Reopen closed tab", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Chat 1
+  await po.sendPrompt("[dump] Chat one reopen");
+  await po.chatActions.waitForChatCompletion();
+
+  // Chat 2
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Chat two reopen");
+  await po.chatActions.waitForChatCompletion();
+
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Close the first tab
+  await closeButtons.first().click();
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(1);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Reopen from context menu
+  const tabs = po.page.locator("div[draggable]");
+  await tabs.first().click({ button: "right" });
+  const reopenItem = po.page.getByText(/Reopen/);
+  await expect(reopenItem).toBeVisible();
+
+  // Verify shortcut label symbols
+  const shortcut = po.page
+    .locator("span")
+    .filter({ hasText: /⇧⌘T|Ctrl\+⇧\+T|Ctrl\+Shift\+T/ });
+  await expect(shortcut).toBeVisible();
+
+  await reopenItem.click();
+
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("group by app: new chat joins its app's group (grouping sticks)", async ({
+  po,
+}) => {
+  await po.setUp({ autoApprove: true });
+
+  // Imported apps are named after their fixture folder (see import_handlers).
+  const appA = "minimal";
+  const appB = "minimal-with-octopusStudio";
+
+  // Reads the app-name line (top line of each tab) in left-to-right order.
+  const readTabAppNames = async () => {
+    const tabs = po.page.locator("div[draggable]");
+    const count = await tabs.count();
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const name = await tabs
+        .nth(i)
+        .locator("button")
+        .first()
+        .locator("span")
+        .first()
+        .innerText();
+      names.push(name.trim());
+    }
+    return names;
+  };
+
+  // App A + one chat.
+  await po.importApp(appA);
+  await po.sendPrompt("[dump] app A first chat");
+  await po.chatActions.waitForChatCompletion();
+
+  // App B + one chat. Tabs now span two apps.
+  await po.navigation.goToAppsTab();
+  await po.page.getByRole("button", { name: "New App" }).click();
+  await po.importApp(appB);
+  await po.sendPrompt("[dump] app B first chat");
+  await po.chatActions.waitForChatCompletion();
+
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+  await expect(async () => {
+    expect(await closeButtons.count()).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Enable "Group tabs by app" from a tab's context menu.
+  const tabs = po.page.locator("div[draggable]");
+  await tabs.first().click({ button: "right" });
+  await po.page.getByText("Group tabs by app").click();
+  await po.page.keyboard.press("Escape");
+
+  // Switch back to App A and open a NEW chat there.
+  await po.appManagement.clickAppListItem({ appName: appA });
+  await po.appManagement.clickOpenInChatButton();
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] app A second chat");
+  await po.chatActions.waitForChatCompletion();
+
+  // Grouping sticks: the new App A chat slots into App A's existing group rather
+  // than landing alone at the front. App A's two tabs stay contiguous, ahead of
+  // App B's tab — i.e. [A, A, B], not the ungrouped [A, B, A].
+  await expect(async () => {
+    const names = await readTabAppNames();
+    expect(names).toEqual([appA, appA, appB]);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});
+
+test("only shows tabs for chats opened in current session", async ({ po }) => {
+  await po.setUp({ autoApprove: true });
+  await po.importApp("minimal");
+
+  // Initially no tabs should be visible (no chats opened yet in this session)
+  const closeButtons = po.page.getByLabel(/^Close tab:/);
+
+  // Create first chat
+  await po.sendPrompt("[dump] Session chat one");
+  await po.chatActions.waitForChatCompletion();
+
+  // Now exactly 1 tab should be visible
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(1);
+  }).toPass({ timeout: Timeout.MEDIUM });
+
+  // Create second chat
+  await po.chatActions.clickNewChat();
+  await po.sendPrompt("[dump] Session chat two");
+  await po.chatActions.waitForChatCompletion();
+
+  // Now exactly 2 tabs should be visible
+  await expect(async () => {
+    const count = await closeButtons.count();
+    expect(count).toBe(2);
+  }).toPass({ timeout: Timeout.MEDIUM });
+});

@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `model_selection` text;

@@ -1,0 +1,10 @@
+import { test } from "./helpers/test_helper";
+
+test("delete custom provider should not freeze", async ({ po }) => {
+  await po.setUp();
+  await po.navigation.goToSettingsTab();
+  await po.page.getByTestId("delete-custom-provider").click();
+  await po.page.getByRole("button", { name: "Delete Provider" }).click();
+  // Make sure UI hasn't freezed
+  await po.navigation.goToAppsTab();
+});

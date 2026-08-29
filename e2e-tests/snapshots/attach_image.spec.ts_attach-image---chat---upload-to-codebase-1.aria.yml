@@ -1,0 +1,18 @@
+- button "Restore to this point"
+- paragraph: basic
+- button "file1.txt file1.txt Edit"
+- paragraph: More EOM
+- button "Copy"
+- text: "[[Version 2: files changed]]"
+- button "Restore to this point"
+- paragraph: "[[UPLOAD_IMAGE_TO_CODEBASE]]"
+- 'button "Expand image: logo.png"'
+- paragraph: Uploading image to codebase
+- text: file.png Copy
+- text: "Copied To: new/image/file.png Uploaded image to codebase"
+- paragraph: "[[octopus-studio-dump-path=*]]"
+- button "Copy"
+- text: "[[Version 3: files changed]]"
+- button "A new/image/file.png"
+- button "Undo"
+- button "Retry"
