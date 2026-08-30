@@ -469,6 +469,7 @@ const BaseUserSettingsFields = {
   // When enabled, OctopusStudio tries to minimize token usage (concise system-prompt
   // instructions, reduced chat-history context) while preserving result quality.
   economyMode: z.boolean().optional(),
+  enableBrowserLimbBridge: z.boolean().optional(),
 };
 
 /**

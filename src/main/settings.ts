@@ -78,6 +78,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   previewIdleTimeoutPolicy: "default",
   nodeRuntimePreference: "system",
   disablePreviewNodeAutoInstall: false,
+  enableBrowserLimbBridge: true,
 };
 
 const CRASH_SENTINEL_FILE = "session.lock";

@@ -19,6 +19,7 @@ import {
 
 import { db } from "../../db";
 import { chats, messages } from "../../db/schema";
+import { mcpServers } from "../../db/schema";
 const scheduleChatSearchIndexing = () => {};
 import { and, eq, isNull } from "drizzle-orm";
 import type { SmartContextMode } from "../../lib/schemas";
@@ -91,11 +92,10 @@ import {
 import { validateChatContext } from "../utils/context_paths_utils";
 import { getProviderOptions, getAiHeaders } from "../utils/provider_options";
 import { sanitizeMcpToolResult } from "../utils/mcp_result_sanitizer";
+import { mcpManager } from "../utils/mcp_manager";
+import { buildMcpToolKey, sanitizeMcpName } from "../utils/mcp_tool_utils";
 
-const clearPendingLocalAgentInputsForChat = (id: any) => {};
-const handleLocalAgentStream = async (...args: any[]) => {
-  throw new Error("Pro feature");
-};
+const clearPendingLocalAgentInputsForChat = (_id: any) => {};
 import { userInputRegistry } from "../../user_input/main";
 
 import { safeSend, type SafeSender } from "../utils/safe_sender";
@@ -154,9 +154,6 @@ import {
 import { acceptChatTurn } from "./chat_turn_acceptance";
 import { withChatQueueLock } from "@/chat_stream/queue_lock";
 import {
-  getFreeAgentQuotaStatus,
-  markMessageAsUsingFreeAgentQuota,
-  unmarkMessageAsUsingFreeAgentQuota,
 } from "./free_agent_quota_handlers";
 import { AI_STREAMING_ERROR_MESSAGE_PREFIX } from "@/shared/texts";
 import { getCurrentCommitHash } from "../utils/git_utils";
@@ -169,7 +166,6 @@ import { readSettings, setSentinelActiveChat } from "@/main/settings";
 import {
   buildLocalAgentAttachmentInfo,
   getInlineImageMimeType,
-  hasScriptReadableAttachment,
   isTextFile,
   resolveAttachmentDeliveryConfig,
   type PendingStoredChatAttachment,
@@ -1636,9 +1632,6 @@ ${componentSnippet}
           }
         }
 
-        const isLocalAgentMode = selectedChatMode === "local-agent";
-        const isAskMode = selectedChatMode === "ask";
-        const isPlanMode = selectedChatMode === "plan";
         const economyMode = !!settings.economyMode;
         const willUseLocalAgentStream =
           isLocalAgentBackedMode(selectedChatMode);
@@ -2256,155 +2249,29 @@ This conversation includes one or more image attachments. When the user uploads 
         // Handle ask mode: use local-agent in read-only mode
         // This gives users access to code reading tools while in ask mode
         // Ask mode does not consume free agent quota
-        if (isAskMode) {
-          // Reconstruct system prompt for local-agent read-only mode
-          const readOnlySystemPrompt = constructSystemPrompt({
-            aiRules,
-            chatMode: "local-agent",
-            enableTurboEditsV2: false,
-            themePrompt,
-            readOnly: true,
-            freeModelMode,
-            codeExplorerAvailable,
-            historyExplorerAvailable,
-            economyMode,
-          });
-
-          // Return value indicates success/failure for quota tracking.
-          // Ask mode doesn't consume quota, but we still capture it for
-          // consistent error handling.
-          const streamSuccess = await handleLocalAgentStream(
-            event,
-            req,
-            abortController,
-            {
-              placeholderMessageId: placeholderAssistantMessage.id,
-              // Note: this is using the read-only system prompt rather than the
-              // regular system prompt which gets overrides for special intents
-              // like summarize chat, security review, etc.
-              //
-              // This is OK because those intents should always happen in a new chat
-              // and new chats will default to non-ask modes.
-              systemPrompt: readOnlySystemPrompt,
-              octopusStudioRequestId:
-                octopusStudioRequestId ?? "[no-request-id]",
-              readOnly: true,
-              messageOverride: isSummarizeIntent ? chatMessages : undefined,
-              settingsOverride: settings,
-              modelSelectionOverride: selectedModel,
-              freeModelMode,
-              referencedApps: referencedAppsForAgent,
-              currentTurnHasOnDiskAttachment:
-                hasScriptReadableAttachment(storedAttachments),
-            },
-          );
-          if (!streamSuccess) {
-            logger.warn(
-              "Ask mode local agent stream did not complete successfully",
-            );
-          }
-          finishedNaturally = streamSuccess;
-          return;
-        }
-
-        // Handle plan mode: use local-agent with plan tools only
-        // Plan mode is for requirements gathering and creating implementation plans
-        if (isPlanMode) {
-          // Reconstruct system prompt for plan mode
-          const planModeSystemPrompt = constructSystemPrompt({
-            aiRules,
-            chatMode: "plan",
-            enableTurboEditsV2: false,
-            themePrompt,
-            freeModelMode,
-            economyMode,
-          });
-
-          finishedNaturally = await handleLocalAgentStream(
-            event,
-            req,
-            abortController,
-            {
-              placeholderMessageId: placeholderAssistantMessage.id,
-              systemPrompt: planModeSystemPrompt,
-              octopusStudioRequestId:
-                octopusStudioRequestId ?? "[no-request-id]",
-              planModeOnly: true,
-              messageOverride: isSummarizeIntent ? chatMessages : undefined,
-              settingsOverride: settings,
-              modelSelectionOverride: selectedModel,
-              freeModelMode,
-              referencedApps: referencedAppsForAgent,
-              currentTurnHasOnDiskAttachment: false,
-            },
-          );
-          return;
-        }
-
-        // Handle local-agent mode (Agent v2).
-        // Referenced apps (from `@app:Name` mentions) are accessed by the
-        // agent via tool calls with an `app_name` parameter — see
-        // resolveTargetAppPath in the local agent tools. handleLocalAgentStream
-        // injects a `<system-reminder>` into the user's latest message telling
-        // the agent which `app_name` values are valid.
-        if (isLocalAgentMode) {
-          // Check quota for Basic Agent mode (non-Pro users)
-          const isBasicAgentModeRequest = isBasicAgentMode(settings);
-          if (isBasicAgentModeRequest) {
-            const quotaStatus = await getFreeAgentQuotaStatus();
-            if (quotaStatus.isQuotaExceeded) {
-              safeSend(event.sender, "chat:response:error", {
-                chatId: req.chatId,
-                invocationRef: req.invocationRef,
-                streamId: req.streamId,
-                error: JSON.stringify({
-                  type: "FREE_AGENT_QUOTA_EXCEEDED",
-                  hoursUntilReset: quotaStatus.hoursUntilReset,
-                  resetTime: quotaStatus.resetTime,
-                }),
-              } satisfies ChatStreamErrorPayload);
-              return;
-            }
-          }
-
-          // Mark the user message as using quota BEFORE starting the stream
-          // to prevent race conditions with parallel requests
-          if (isBasicAgentModeRequest && userMessageId) {
-            await markMessageAsUsingFreeAgentQuota(userMessageId);
-          }
-
-          let streamSuccess = false;
-          try {
-            streamSuccess = await handleLocalAgentStream(
-              event,
-              req,
-              abortController,
-              {
-                placeholderMessageId: placeholderAssistantMessage.id,
-                systemPrompt,
-                octopusStudioRequestId:
-                  octopusStudioRequestId ?? "[no-request-id]",
-                messageOverride: isSummarizeIntent ? chatMessages : undefined,
-                settingsOverride: settings,
-                modelSelectionOverride: selectedModel,
-                freeModelMode,
-                referencedApps: referencedAppsForAgent,
-                currentTurnHasOnDiskAttachment:
-                  hasScriptReadableAttachment(storedAttachments),
-              },
-            );
-          } finally {
-            // If the stream failed, was aborted, or threw, refund the quota
-            if (isBasicAgentModeRequest && userMessageId && !streamSuccess) {
-              await unmarkMessageAsUsingFreeAgentQuota(userMessageId);
-            }
-          }
-
-          finishedNaturally = streamSuccess;
-          return;
-        }
 
         let modelRefused = false;
+
+        let mcpTools: Record<string, any> = {};
+        try {
+          const servers = await db.select().from(mcpServers);
+          for (const server of servers) {
+            try {
+              const client = await mcpManager.getClient(server.id);
+              const tools = await client.tools();
+              if (tools) {
+                const safeServerName = sanitizeMcpName(server.name);
+                for (const [toolName, toolDef] of Object.entries(tools)) {
+                  mcpTools[buildMcpToolKey(safeServerName, toolName)] = toolDef;
+                }
+              }
+            } catch (e) {
+              logger.warn(`Failed to fetch MCP tools for server ${server.name}`, e);
+            }
+          }
+        } catch (e) {
+          logger.warn("Failed to fetch MCP servers", e);
+        }
 
         // When calling streamText, the messages need to be properly formatted for mixed content
         const fullStream = modelRefused
@@ -2414,6 +2281,7 @@ This conversation includes one or more image attachments. When the user uploads 
                 chatMessages,
                 modelClient,
                 files: files,
+                tools: Object.keys(mcpTools).length > 0 ? mcpTools : undefined,
               })
             ).fullStream;
 
@@ -2493,6 +2361,7 @@ This conversation includes one or more image attachments. When the user uploads 
                   ],
                   modelClient,
                   files: files,
+                  tools: Object.keys(mcpTools).length > 0 ? mcpTools : undefined,
                 });
               previousAttempts.push(userPrompt);
               const result = await processStreamChunks({
@@ -2562,6 +2431,7 @@ This conversation includes one or more image attachments. When the user uploads 
                 ],
                 modelClient,
                 files: files,
+                  tools: Object.keys(mcpTools).length > 0 ? mcpTools : undefined,
               });
               const result = await processStreamChunks({
                 fullStream: contStream,
