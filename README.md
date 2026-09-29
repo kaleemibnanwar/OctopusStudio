@@ -7,7 +7,7 @@
 [![Latest release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?label=release)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#download)
 
-[Download](#download) · [Features](#what-you-can-do) · [Quick start](#quick-start) · [Tutorials](docs/tutorials/README.md)
+[Download](#download) · [Features](#what-you-can-do) · [Case studies](docs/CASE_STUDIES.md) · [Quick start](#quick-start) · [Tutorials](docs/tutorials/README.md)
 
 </div>
 
@@ -19,7 +19,8 @@ Octopus Studio helps people move from an idea to a working project they can prev
 - **Bring your own model.** Connect supported cloud providers or local runtimes such as Ollama and LM Studio.
 - **Stay in control.** Review plans, file changes, terminal output, tool calls, and Git history.
 - **Work with existing projects.** Import local folders or GitHub repositories instead of starting over.
-- **Connect and automate.** Use deployment/database integrations, MCP plugins, reusable skills, and scheduled tasks.
+- **Create more than software.** Research in Chat Projects and work with documents, spreadsheets, presentations, Markdown, HTML, SVG, images, audio, and video.
+- **Connect and automate.** Use model routing, Economy Mode, MCP plugins, reusable skills, and scheduled tasks.
 
 Octopus Studio is local-first, not offline-only. Project files and desktop data are stored locally. Cloud models and integrations receive the information needed to perform requests under their respective terms.
 
@@ -31,17 +32,21 @@ This public repository intentionally contains release information and user docum
 
 ## What you can do
 
-| Area                | Capabilities                                                                                                     |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Build               | Create projects from a prompt, use blueprints and follow-up questions, and watch a live preview.                 |
-| Import              | Open a local project, choose a connected GitHub repository, or clone from a repository URL.                      |
-| Chat modes          | Build with broad context, use Agent for tool-driven changes, Plan before implementation, or Ask without editing. |
-| Inspect and recover | Review modified files and commits, browse code, inspect logs/tests, create branches, and restore versions.       |
-| Connect services    | Integrate GitHub, Vercel, Supabase, Neon, Google Workspace, image search providers, and MCP servers.             |
-| Reuse and automate  | Save prompts and skills, schedule agent tasks, and configure model/tool limits.                                  |
-| Organize            | Manage coding projects, chat projects, collections, templates, themes, skills, and media.                        |
+| Area                        | Capabilities                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Build software              | Create projects from a prompt, use blueprints and follow-up questions, and work against live HTML/app previews.         |
+| Research and knowledge work | Use codeless Chat Projects for research, notes, plans, reports, and long-running topic work.                            |
+| Documents and data          | Preview and edit DOCX, XLSX, and Markdown files in the workspace; preview presentations and supported HTML/SVG content. |
+| Media                       | Preview images, audio, and video in the app; generate media and search supported image providers.                       |
+| Model control               | Bring cloud or local models, use automatic model routing, and enable Economy Mode for lower-cost routine work.          |
+| Import                      | Open a local project, choose a connected GitHub repository, or clone from a repository URL.                             |
+| Chat modes                  | Build with broad context, use Agent for tool-driven changes, Plan before implementation, or Ask without editing.        |
+| Inspect and recover         | Review modified files and commits, browse code, inspect logs/tests, create branches, and restore versions.              |
+| Connect services            | Integrate GitHub, Vercel, Supabase, Neon, Google Workspace, image search providers, and MCP servers.                    |
+| Reuse and automate          | Save prompts and skills, schedule tasks hourly/daily/weekly/custom, and configure model/tool limits.                    |
+| Organize                    | Manage coding projects, chat projects, collections, templates, themes, prompts, skills, and media.                      |
 
-See [Features and use cases](docs/FEATURES_AND_USE_CASES.md) for the larger product catalog.
+See [Features and use cases](docs/FEATURES_AND_USE_CASES.md) for the larger product catalog and [Case studies](docs/CASE_STUDIES.md) for end-to-end examples.
 
 ## Quick start
 
@@ -60,10 +65,17 @@ The [tutorial index](docs/tutorials/README.md) includes short guides for:
 
 - model-provider setup
 - building and importing projects
+- Chat Projects for research and knowledge work
+- automatic model routing and Economy Mode
+- office files, Markdown, HTML, SVG, and media workflows
 - chat modes and agent permissions
 - previews and version history
 - GitHub, Vercel, Supabase, and Neon
 - MCP plugins, skills, tasks, and Library assets
+
+## Designed for complete workflows
+
+Octopus Studio combines capabilities that are often split across a chat assistant, office suite, code editor, Git client, media viewer, automation tool, and deployment console. A scheduled task can continue work in a project; a Chat Project can hold the research; files and media can be reviewed in-app; and an MCP plugin can connect the result to an external service. The value is the connected workflow—not any single feature in isolation.
 
 ## Privacy and security
 

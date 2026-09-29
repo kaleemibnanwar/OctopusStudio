@@ -6,7 +6,7 @@ A single reference covering every feature of Octopus Studio, with the concrete u
 
 ## What is Octopus Studio?
 
-Octopus Studio is a **local-first, open-source AI app builder**. You describe an app in plain language; the AI generates real, running code and opens a live preview on your machine. Project files and local app data stay on your machine. When you use cloud models or integrations, relevant data is sent to those providers; Ollama and LM Studio provide a local-model path.
+Octopus Studio is a **local-first AI workspace and app builder**. You can build software in plain language, organize codeless research in Chat Projects, work with documents and data, preview media, and automate recurring prompts. Project files and local app data stay on your machine. When you use cloud models or integrations, relevant data is sent to those providers; Ollama and LM Studio provide a local-model path.
 
 The product is named for the octopus metaphor: **eight arms, eight jobs.** One arm scaffolds the app while another wires a plugin, one keeps a scheduled task running in the background while another reviews the diff a squad of agents just produced. You describe what you want built; it dives down and comes back with the thing — a real codebase, not a mockup.
 
@@ -138,15 +138,16 @@ Connect real tools through the **Model Context Protocol** from a bundled catalog
 - Letting the agent create a Linear issue when it finishes a feature.
 - Posting a completed app's announcement to LinkedIn/Gmail from the chat.
 
-### 11. Bring your own model
+### 11. Bring your own model, automatic routing & Economy Mode
 
-Pick your current: OpenAI, Anthropic, Google, or a **local model via Ollama/LM Studio**. **Economy Mode** trims context and output for cheaper, faster turns.
+Connect supported providers such as OpenAI, Anthropic, Google, Azure, Bedrock, OpenRouter, xAI, or a **local model via Ollama/LM Studio**. Choose a model directly, or use automatic model routing where available to match work to an appropriate configured model. **Economy Mode** reduces context and output use for cheaper, faster routine turns.
 
 **Use cases**
 
-- Privacy-sensitive work: run everything on a local model, nothing leaves the machine.
+- Privacy-sensitive inference: use a local model and avoid cloud integrations when the workflow must remain local.
 - Cost control: switch to Economy Mode for routine turns, a strong model for hard ones.
 - Avoiding vendor lock-in by swapping providers per project.
+- Letting model routing handle mixed workloads without repeatedly changing the selected model.
 
 ### 12. Git, versions & rollback
 
@@ -178,14 +179,16 @@ Push to GitHub and deploy to Vercel from the app, so the thing you built locally
 - Keeping a git remote in sync automatically while you build.
 - Handing a codebase to a developer via GitHub once you outgrow the prototype.
 
-### 15. Media & image generation
+### 15. Media generation, search & in-app preview
 
-Generate images and manage media assets for the app.
+Generate and organize media assets, search supported stock/image providers, and preview supported images, audio, and video without leaving the workspace.
 
 **Use cases**
 
 - Generating placeholder/hero images for a landing page.
 - Producing an app icon or logo variation without a designer.
+- Searching for licensed/reference imagery during a content workflow.
+- Reviewing a campaign's images, narration, and video assets together before publishing.
 
 ### 16. Collections & Library
 
@@ -252,35 +255,64 @@ A guided first-run flow: describe your idea → connect an AI provider (or a loc
 - A first-time user goes from "I have an idea" to a running app without touching a terminal.
 - The app recovers gracefully if a setup step fails, resuming the user's original idea instead of discarding it.
 
+### 23. Document, spreadsheet & presentation workspace
+
+Open and preview common knowledge-work formats inside the project workspace. Supported workflows include in-app editing for DOCX, XLSX, and Markdown; spreadsheet grid and formula-oriented work; presentation previews for PPTX; and previews for supported HTML and SVG files.
+
+**Use cases**
+
+- Drafting and revising a client report without repeatedly switching applications.
+- Cleaning a spreadsheet, reviewing formulas, and producing a written summary from the same workspace.
+- Reviewing a presentation alongside its research notes and supporting media.
+- Editing Markdown documentation and previewing the rendered result.
+- Inspecting generated HTML or SVG assets before they are added to a project.
+
+### 24. Rich file and media context
+
+Documents and media are not limited to passive attachments. Supported files can be opened in purpose-built previews or editors, giving the agent and user a shared artifact to discuss and revise.
+
+**Use cases**
+
+- Compare a DOCX brief with the XLSX data behind it.
+- Review an image, audio clip, or video while drafting associated content.
+- Keep source notes in Markdown while producing a presentation or report.
+- Inspect HTML output and visual assets during a marketing or software workflow.
+
 ---
 
 ## Use-Case Quick Reference
 
-| I want to…                                 | Use                           |
-| ------------------------------------------ | ----------------------------- |
-| Turn an idea into a working app            | Build apps by describing them |
-| See changes as they happen                 | Live preview                  |
-| Tweak the UI visually                      | Visual editing                |
-| Keep notes/plans without code              | Chat Projects                 |
-| Start from a scaffold                      | Templates                     |
-| Agree on a plan before building            | Blueprint + planning          |
-| Answer a couple of questions to scope work | Clarifying questionnaire      |
-| Run a prompt on a schedule                 | Tasks                         |
-| Get multiple perspectives on one goal      | Workers                       |
-| Delegate isolated parallel work            | Multi-agent / sub-agents      |
-| Connect Gmail/Slack/Notion/Linear/etc.     | Plugins (MCP)                 |
-| Use my own/local model                     | Bring your own model          |
-| Undo a bad change                          | Git versions & rollback       |
-| Add a database                             | Supabase / Neon               |
-| Put it on the internet                     | GitHub / Vercel               |
-| Generate images                            | Media & image generation      |
-| Organize my projects                       | Collections & Library         |
-| Keep long threads alive                    | Context compaction            |
-| Control what the agent can do              | Settings & permissions        |
-| Make it look/feel mine                     | Themes                        |
-| Use it in my language                      | Localization                  |
-| Use it with a screen reader / keyboard     | Accessibility                 |
-| Get started with zero friction             | Onboarding                    |
+| I want to…                                 | Use                              |
+| ------------------------------------------ | -------------------------------- |
+| Turn an idea into a working app            | Build apps by describing them    |
+| See changes as they happen                 | Live preview                     |
+| Tweak the UI visually                      | Visual editing                   |
+| Keep notes/plans without code              | Chat Projects                    |
+| Manage a long-running research topic       | Chat Projects + scheduled tasks  |
+| Start from a scaffold                      | Templates                        |
+| Agree on a plan before building            | Blueprint + planning             |
+| Answer a couple of questions to scope work | Clarifying questionnaire         |
+| Run a prompt on a schedule                 | Tasks                            |
+| Get multiple perspectives on one goal      | Workers                          |
+| Delegate isolated parallel work            | Multi-agent / sub-agents         |
+| Connect Gmail/Slack/Notion/Linear/etc.     | Plugins (MCP)                    |
+| Use my own/local model                     | Bring your own model             |
+| Automatically choose an appropriate model  | Model routing                    |
+| Reduce routine model cost                  | Economy Mode                     |
+| Undo a bad change                          | Git versions & rollback          |
+| Add a database                             | Supabase / Neon                  |
+| Put it on the internet                     | GitHub / Vercel                  |
+| Generate or search for images              | Media generation + image search  |
+| Preview audio, video, and images in-app    | Media preview                    |
+| Edit reports, data, and notes              | DOCX, XLSX, and Markdown editors |
+| Review slides, HTML, or SVG                | PPTX, HTML, and SVG previews     |
+| Organize my projects                       | Collections & Library            |
+| Keep long threads alive                    | Context compaction               |
+| Control what the agent can do              | Settings & permissions           |
+| Make it look/feel mine                     | Themes                           |
+| Use it in my language                      | Localization                     |
+| Use it with a screen reader / keyboard     | Accessibility                    |
+| Get started with zero friction             | Onboarding                       |
 
 ---
 
