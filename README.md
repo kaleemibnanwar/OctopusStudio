@@ -90,3 +90,9 @@ Octopus Studio combines capabilities that are often split across a chat assistan
 ## Repository scope
 
 This is the public distribution and documentation repository for Octopus Studio. It contains no application source code. Release availability and individual features may vary by platform, account, provider, and application version.
+
+## Want the source code?
+
+Interested in seeing Octopus Studio become open source? Send a request to [kaleemibanwar@gmail.com](mailto:kaleemibanwar@gmail.com) with the subject **Octopus Studio source request**.
+
+If the project receives **100 genuine source-code requests by email**, I will make the source code public.
