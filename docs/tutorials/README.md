@@ -1,33 +1,41 @@
 # Octopus Studio tutorials
 
-These short guides are organized around outcomes. UI labels may move slightly between releases, but the underlying workflow should remain the same.
+Short, outcome-led guides. UI labels may move slightly between releases, but the workflow should remain recognizable.
 
-## Start here
+## First 10 minutes
 
 1. [Install and first run](01-install-and-first-run.md)
 2. [Connect an AI model](03-connect-an-ai-model.md)
-3. [Use Chat Projects for research](13-chat-projects-for-research.md)
-4. [Work with documents, data, and media](15-documents-data-and-media.md)
+3. Pick your first outcome:
+   - [Create a research Chat Project](13-chat-projects-for-research.md)
+   - [Work with documents, data, and media](15-documents-data-and-media.md)
+   - [Import an existing software project](05-import-an-existing-project.md)
 
-## Project workflows
+## Research and knowledge work
 
-- [Choose a chat mode](04-chat-modes-and-permissions.md)
-- [Import an existing project](05-import-an-existing-project.md)
-- [Preview, inspect, and restore versions](06-preview-and-version-history.md)
-- [Publish with GitHub and Vercel](07-github-and-vercel.md)
-- [Add Supabase or Neon](08-databases.md)
-- [Use model routing and Economy Mode](14-model-routing-and-economy.md)
-- [Build your first software project](02-build-your-first-app.md)
-
-## Reuse and automation
-
-- [Connect MCP plugins](09-plugins.md)
+- [Use Chat Projects for research](13-chat-projects-for-research.md)
 - [Create reusable skills](10-skills.md)
-- [Schedule tasks](11-scheduled-tasks.md)
+- [Schedule recurring tasks](11-scheduled-tasks.md)
 - [Use Library assets](12-library-and-media.md)
 
-## Workflow examples
+## Documents, data and media
+
+- [Work with DOCX, XLSX, Markdown, PPTX, HTML, SVG, images, audio, and video](15-documents-data-and-media.md)
+- [Use model routing and Economy Mode](14-model-routing-and-economy.md)
+- [Connect MCP plugins](09-plugins.md)
+
+## Software projects
+
+- [Build your first software project](02-build-your-first-app.md)
+- [Import an existing project](05-import-an-existing-project.md)
+- [Choose a chat mode and permissions](04-chat-modes-and-permissions.md)
+- [Preview, inspect, and restore versions](06-preview-and-version-history.md)
+- [Add Supabase or Neon](08-databases.md)
+- [Publish with GitHub and Vercel](07-github-and-vercel.md)
+
+## Explore complete workflows
 
 - [Research, marketing, financial/data, content, software, and client case studies](../CASE_STUDIES.md)
-
-For a catalog rather than a tutorial, see [Features and use cases](../FEATURES_AND_USE_CASES.md).
+- [Full feature map](../FEATURES_AND_USE_CASES.md)
+- [Comparison guide](../COMPARISON.md)
+- [Frequently asked questions](../FAQ.md)

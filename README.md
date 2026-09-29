@@ -1,98 +1,158 @@
 <div align="center">
 
-# 🐙 Octopus Studio
+<img src="docs/assets/logo.svg" alt="Octopus Studio" width="112" />
 
-**A local-first AI workspace for research, documents, data, media, automation, connected tools, and development.**
+# Octopus Studio
 
-[![Latest release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?label=release)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#download)
+### One local-first AI workspace for the work that refuses to fit in one app.
 
-[Download](#download) · [Features](#what-you-can-do) · [Case studies](docs/CASE_STUDIES.md) · [Quick start](#quick-start) · [Tutorials](docs/tutorials/README.md)
+Research · Documents · Data · Media · Automation · MCP · Development
+
+[![Latest release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?label=latest&style=for-the-badge)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/kaleemibnanwar/OctopusStudio/total?style=for-the-badge&label=downloads)](https://github.com/kaleemibnanwar/OctopusStudio/releases)
+[![Stars](https://img.shields.io/github/stars/kaleemibnanwar/OctopusStudio?style=for-the-badge)](https://github.com/kaleemibnanwar/OctopusStudio/stargazers)
+[![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-available-14b8a6?style=for-the-badge)](#download)
+
+[Download](#download) · [See what it does](#eight-arms-one-workspace) · [Case studies](docs/CASE_STUDIES.md) · [Compare](docs/COMPARISON.md) · [Tutorials](docs/tutorials/README.md) · [FAQ](docs/FAQ.md)
 
 </div>
 
-## Why Octopus Studio?
+---
 
-Octopus Studio brings AI-assisted work into one desktop workspace. Research a topic, edit documents and spreadsheets, review media, automate recurring work, connect external tools, or develop software without forcing every workflow into a coding project.
+Most AI tools give you a chat box. Octopus Studio gives the work somewhere to live.
 
-- **Work in the right kind of project.** Use codeless Chat Projects for research and knowledge work, or coding projects when the task involves software.
-- **Bring your own model.** Connect supported cloud providers or local runtimes such as Ollama and LM Studio.
-- **Stay in control.** Review plans, file changes, terminal output, tool calls, and Git history.
-- **Work with existing projects.** Import local folders or GitHub repositories instead of starting over.
-- **Create more than software.** Research in Chat Projects and work with documents, spreadsheets, presentations, Markdown, HTML, SVG, images, audio, and video.
-- **Connect and automate.** Use model routing, Economy Mode, MCP plugins, reusable skills, and scheduled tasks.
+Create a codeless research project. Edit the report and spreadsheet beside it. Review images, audio, video, HTML, and presentations. Schedule the next update. Connect real tools through MCP. Route each task to a suitable cloud or local model. And when the work is software, plan it, build it, preview it, version it, and ship it from the same workspace.
 
-Octopus Studio is local-first, not offline-only. Project files and desktop data are stored locally. Cloud models and integrations receive the information needed to perform requests under their respective terms.
+**Software development is one arm—not the whole octopus.**
+
+## The 30-second tour
+
+```mermaid
+flowchart LR
+    A[Think<br/>Chat Projects] --> B[Create<br/>Docs · Data · Media]
+    B --> C[Connect<br/>MCP · Services]
+    C --> D[Automate<br/>Scheduled Tasks]
+    D --> E[Review<br/>Previews · Changes]
+    E --> A
+    B --> F[Develop<br/>Code · Git · Deploy]
+    F --> E
+```
+
+Your files remain useful outside Octopus Studio. Cloud models and connected services receive only the context used for their requests; local models are available through Ollama and LM Studio when configured.
+
+## Eight arms, one workspace
+
+| Arm                | What it unlocks                                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 🔎 **Research**    | Codeless Chat Projects for investigations, planning, notes, and long-running knowledge work.                     |
+| 📄 **Documents**   | In-app DOCX and Markdown editing, PPTX preview, and connected report workflows.                                  |
+| 📊 **Data**        | XLSX editing and preview for sheets, values, formulas, analysis, and recurring reporting.                        |
+| 🎬 **Media**       | Preview images, SVG, audio, and video; search image providers and generate media with configured models.         |
+| ⏱️ **Automation**  | Run saved prompts manually or hourly, daily, weekly, or on a custom interval.                                    |
+| 🔌 **Connections** | Add MCP tools and connect services such as Google Workspace, GitHub, Vercel, Supabase, and Neon.                 |
+| 🧠 **Models**      | Bring supported providers or local models, use automatic routing, and turn on Economy Mode for routine work.     |
+| 🛠️ **Development** | Create or import software projects, plan changes, edit files, run tests, preview HTML/apps, use Git, and deploy. |
+
+No single workflow has to use every arm. The point is that your next step is already nearby.
+
+## See it in action
+
+### Automation that returns to real projects
+
+Save a prompt, choose its project, tools, model, and cadence, then inspect each run.
+
+<p align="center">
+  <img src="docs/assets/screenshots/tasks.png" alt="Octopus Studio scheduled tasks" width="900" />
+</p>
+
+### MCP tools without hand-editing configuration
+
+Browse the catalog, connect trusted services, and give the agent only the tools the workflow needs.
+
+<p align="center">
+  <img src="docs/assets/screenshots/plugins.png" alt="Octopus Studio MCP plugin catalog" width="900" />
+</p>
+
+### Multiple perspectives, one shared objective
+
+Dispatch role-based workers for structured review and coordinated work in a shared project.
+
+<p align="center">
+  <img src="docs/assets/screenshots/workers.png" alt="Octopus Studio automated workers panel" width="900" />
+</p>
+
+## What people can do with it
+
+| Workflow                  | Start with                        | Add                                     | Produce                                   |
+| ------------------------- | --------------------------------- | --------------------------------------- | ----------------------------------------- |
+| **Research management**   | A Chat Project and research skill | MCP sources + scheduled updates         | Evidence log, XLSX data, DOCX report      |
+| **Marketing operations**  | Campaign brief                    | Image search/generation + media preview | Calendar, assets, copy, launch deck       |
+| **Financial/data review** | An XLSX workbook                  | Controlled analysis + Economy Mode      | Cleaned data, findings, management report |
+| **Creator automation**    | Research and editorial skill      | Media + recurring review tasks          | Article, deck, newsletter, video briefs   |
+| **Client operations**     | One project per engagement        | Skills + schedules + connected tools    | Repeatable reports and status updates     |
+| **Software delivery**     | Existing repo or template         | Plan + agent + tests + preview          | Versioned, deployable project             |
+
+Read the detailed [workflow case studies](docs/CASE_STUDIES.md).
+
+## Why not just use a chat app?
+
+ChatGPT Desktop and Claude Desktop are powerful general assistants. Coding agents are excellent at repositories. Office suites are excellent at individual file formats. Automation platforms connect triggers and actions.
+
+Octopus Studio's bet is different: **the project, its files, its reusable process, its scheduled work, its connected tools, and its model choices should live together.**
+
+| When you care most about…                                                                                     | Consider                        |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| A broad assistant ecosystem, browser/computer use, and OpenAI models                                          | ChatGPT Desktop                 |
+| Anthropic models, Projects, and mature desktop/web connectors                                                 | Claude Desktop                  |
+| Deep code-editor ergonomics above everything else                                                             | A dedicated AI IDE/coding agent |
+| Specialized office collaboration and enterprise document controls                                             | A traditional office suite      |
+| A local-first, model-flexible workspace spanning research, rich files, media, schedules, MCP, and development | **Octopus Studio**              |
+
+See the sourced, capability-by-capability [comparison](docs/COMPARISON.md). No fake “we win every row” table.
 
 ## Download
 
-Download the latest available installer or archive from [GitHub Releases](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest). Open the release notes and choose the asset for your operating system and architecture.
+1. Open the [latest release](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest).
+2. Read the release notes and choose the asset for your operating system and architecture.
+3. Install or extract it, then launch Octopus Studio.
+4. Connect a supported cloud provider or local Ollama/LM Studio runtime.
+5. Create a Chat Project, open a file, schedule a task, connect an MCP tool, or add a software project.
 
-This public repository intentionally contains release information and user documentation only. It does not distribute the application source code.
+Availability can vary by platform, release, account, provider, subscription, and connected service.
 
-## What you can do
+## Pick a starting point
 
-| Area                        | Capabilities                                                                                                            |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Research and knowledge work | Use codeless Chat Projects for research, notes, plans, reports, and long-running topic work.                            |
-| Documents and data          | Preview and edit DOCX, XLSX, and Markdown files in the workspace; preview presentations and supported HTML/SVG content. |
-| Media                       | Preview images, audio, and video in the app; generate media and search supported image providers.                       |
-| Automation                  | Run prompts manually or schedule them hourly, daily, weekly, or at a custom interval against the appropriate project.   |
-| Model control               | Bring cloud or local models, use automatic model routing, and enable Economy Mode for lower-cost routine work.          |
-| Connected tools             | Extend the agent through MCP and integrate services such as Google Workspace, GitHub, Vercel, Supabase, and Neon.       |
-| Software development        | Create or import projects, plan changes, edit code, run tests, use live HTML/app previews, and maintain Git history.    |
-| Import                      | Open a local project, choose a connected GitHub repository, or clone from a repository URL.                             |
-| Chat modes                  | Build with broad context, use Agent for tool-driven changes, Plan before implementation, or Ask without editing.        |
-| Inspect and recover         | Review modified files and commits, browse code, inspect logs/tests, create branches, and restore versions.              |
-| Connect services            | Integrate GitHub, Vercel, Supabase, Neon, Google Workspace, image search providers, and MCP servers.                    |
-| Reuse and automate          | Save prompts and skills, schedule tasks hourly/daily/weekly/custom, and configure model/tool limits.                    |
-| Organize                    | Manage coding projects, chat projects, collections, templates, themes, prompts, skills, and media.                      |
+- **I need recurring research:** [Create a research Chat Project](docs/tutorials/13-chat-projects-for-research.md) → [schedule updates](docs/tutorials/11-scheduled-tasks.md)
+- **I work with reports and data:** [Open documents, spreadsheets, and media](docs/tutorials/15-documents-data-and-media.md)
+- **I want lower-cost model usage:** [Configure routing and Economy Mode](docs/tutorials/14-model-routing-and-economy.md)
+- **I need external tools:** [Connect an MCP plugin](docs/tutorials/09-plugins.md)
+- **I have an existing codebase:** [Import it](docs/tutorials/05-import-an-existing-project.md) → [choose a chat mode](docs/tutorials/04-chat-modes-and-permissions.md)
+- **I want the full map:** [Features and use cases](docs/FEATURES_AND_USE_CASES.md)
 
-See [Features and use cases](docs/FEATURES_AND_USE_CASES.md) for the larger product catalog and [Case studies](docs/CASE_STUDIES.md) for end-to-end examples.
+## Privacy, control, and honest boundaries
 
-## Quick start
+- Project files and local workspace data are stored on your machine.
+- A cloud model receives the prompt and context sent to that provider.
+- Local inference can use Ollama or LM Studio, but connected services can still make network requests.
+- MCP servers are third-party tools; review permissions, credentials, and consequential actions.
+- Keep approval gates on for sensitive commands, external actions, database changes, and unattended tasks.
+- Octopus Studio can assist with research, financial/data work, and other professional tasks; qualified human review remains essential.
 
-1. Install Octopus Studio from the [latest release](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest).
-2. Launch the desktop application.
-3. Open **Settings → Model Providers** and connect a supported provider or local model runtime.
-4. Select a default model under **AI**.
-5. Return home, describe the app or task you want, and submit the prompt.
-6. Review any plan, questionnaire, or requested tool approval before continuing.
-
-Start with [Install and first run](docs/tutorials/01-install-and-first-run.md), then follow [Build your first app](docs/tutorials/02-build-your-first-app.md).
-
-## Documentation
-
-The [tutorial index](docs/tutorials/README.md) includes short guides for:
-
-- model-provider setup
-- building and importing projects
-- Chat Projects for research and knowledge work
-- automatic model routing and Economy Mode
-- office files, Markdown, HTML, SVG, and media workflows
-- chat modes and agent permissions
-- previews and version history
-- GitHub, Vercel, Supabase, and Neon
-- MCP plugins, skills, tasks, and Library assets
-
-## Designed for complete workflows
-
-Octopus Studio combines capabilities that are often split across a chat assistant, office suite, data workspace, media viewer, automation tool, code editor, and integration hub. A scheduled task can continue work in a project; a Chat Project can hold the research; files and media can be reviewed in-app; and an MCP plugin can connect the result to an external service. Software development is one supported workflow within that broader workspace—not the product's sole identity.
-
-## Privacy and security
-
-- Cloud model providers receive prompt content and selected context.
-- Local models can keep model inference on the user's machine.
-- Connected plugins and external services may make network requests.
-- Review tool permissions and third-party account access before approval.
-- Never commit API keys, access tokens, or `.env` secrets to a project.
-
-## Repository scope
-
-This is the public distribution and documentation repository for Octopus Studio. It contains no application source code. Release availability and individual features may vary by platform, account, provider, and application version.
+Read the [FAQ](docs/FAQ.md) for product scope, data flow, formats, and limitations.
 
 ## Want the source code?
 
-Interested in seeing Octopus Studio become open source? Send a request to [kaleemibanwar@gmail.com](mailto:kaleemibanwar@gmail.com) with the subject **Octopus Studio source request**.
+This repository intentionally contains releases, documentation, and documentation assets—not application source code.
 
-If the project receives **100 genuine source-code requests by email**, I will make the source code public.
+Want Octopus Studio to become open source? Email [kaleemibanwar@gmail.com](mailto:kaleemibanwar@gmail.com?subject=Octopus%20Studio%20source%20request) with the subject **Octopus Studio source request**. If the project receives **100 genuine source-code requests by email**, I will make the source code public.
+
+## Help this project travel
+
+If Octopus Studio matches how you want AI workspaces to evolve:
+
+1. ⭐ Star the repository so others can find it.
+2. Download a release and try one complete workflow.
+3. Share the [case study](docs/CASE_STUDIES.md) that fits your work.
+4. Open an issue with the workflow that would make Octopus Studio indispensable to you.
+
+> **Shareable one-liner:** Octopus Studio is a local-first AI workspace where research, documents, data, media, scheduled tasks, MCP tools, model routing, and software projects live together.
