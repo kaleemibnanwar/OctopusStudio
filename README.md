@@ -2,7 +2,7 @@
 
 # 🐙 Octopus Studio
 
-**A local-first AI desktop workspace for building and operating software.**
+**A local-first AI workspace for research, documents, data, media, automation, connected tools, and development.**
 
 [![Latest release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?label=release)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#download)
@@ -13,9 +13,9 @@
 
 ## Why Octopus Studio?
 
-Octopus Studio helps people move from an idea to a working project they can preview, inspect, version, connect to real services, and ship.
+Octopus Studio brings AI-assisted work into one desktop workspace. Research a topic, edit documents and spreadsheets, review media, automate recurring work, connect external tools, or develop software without forcing every workflow into a coding project.
 
-- **Build from a description.** Start a project in plain language and iterate against a live preview.
+- **Work in the right kind of project.** Use codeless Chat Projects for research and knowledge work, or coding projects when the task involves software.
 - **Bring your own model.** Connect supported cloud providers or local runtimes such as Ollama and LM Studio.
 - **Stay in control.** Review plans, file changes, terminal output, tool calls, and Git history.
 - **Work with existing projects.** Import local folders or GitHub repositories instead of starting over.
@@ -34,11 +34,13 @@ This public repository intentionally contains release information and user docum
 
 | Area                        | Capabilities                                                                                                            |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Build software              | Create projects from a prompt, use blueprints and follow-up questions, and work against live HTML/app previews.         |
 | Research and knowledge work | Use codeless Chat Projects for research, notes, plans, reports, and long-running topic work.                            |
 | Documents and data          | Preview and edit DOCX, XLSX, and Markdown files in the workspace; preview presentations and supported HTML/SVG content. |
 | Media                       | Preview images, audio, and video in the app; generate media and search supported image providers.                       |
+| Automation                  | Run prompts manually or schedule them hourly, daily, weekly, or at a custom interval against the appropriate project.   |
 | Model control               | Bring cloud or local models, use automatic model routing, and enable Economy Mode for lower-cost routine work.          |
+| Connected tools             | Extend the agent through MCP and integrate services such as Google Workspace, GitHub, Vercel, Supabase, and Neon.       |
+| Software development        | Create or import projects, plan changes, edit code, run tests, use live HTML/app previews, and maintain Git history.    |
 | Import                      | Open a local project, choose a connected GitHub repository, or clone from a repository URL.                             |
 | Chat modes                  | Build with broad context, use Agent for tool-driven changes, Plan before implementation, or Ask without editing.        |
 | Inspect and recover         | Review modified files and commits, browse code, inspect logs/tests, create branches, and restore versions.              |
@@ -75,7 +77,7 @@ The [tutorial index](docs/tutorials/README.md) includes short guides for:
 
 ## Designed for complete workflows
 
-Octopus Studio combines capabilities that are often split across a chat assistant, office suite, code editor, Git client, media viewer, automation tool, and deployment console. A scheduled task can continue work in a project; a Chat Project can hold the research; files and media can be reviewed in-app; and an MCP plugin can connect the result to an external service. The value is the connected workflow—not any single feature in isolation.
+Octopus Studio combines capabilities that are often split across a chat assistant, office suite, data workspace, media viewer, automation tool, code editor, and integration hub. A scheduled task can continue work in a project; a Chat Project can hold the research; files and media can be reviewed in-app; and an MCP plugin can connect the result to an external service. Software development is one supported workflow within that broader workspace—not the product's sole identity.
 
 ## Privacy and security
 

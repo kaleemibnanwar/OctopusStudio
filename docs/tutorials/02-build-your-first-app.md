@@ -1,4 +1,4 @@
-# Build your first app
+# Build your first software project
 
 1. On **Home**, describe the outcome, audience, and must-have behavior. Example: “Build a mobile-friendly reading list with tags, search, and local persistence.”
 2. Choose a starter when prompted. React/Vite is a good default; choose Next.js when its framework features matter.
