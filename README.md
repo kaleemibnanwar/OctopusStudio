@@ -1,36 +1,78 @@
+<div align="center">
+
 # 🐙 Octopus Studio
 
-> **Local, AI-powered desktop workspace & application builder.**
+**A local-first AI desktop workspace for building and operating software.**
 
-[![Release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?style=flat-square&color=blue)](https://github.com/kaleemibnanwar/OctopusStudio/releases)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux-green?style=flat-square)](#-downloads--installers)
-[![License](https://img.shields.io/badge/License-Proprietary-orange?style=flat-square)](#-license--terms)
+[![Latest release](https://img.shields.io/github/v/release/kaleemibnanwar/OctopusStudio?label=release)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#download)
 
----
+[Download](#download) · [Features](#what-you-can-do) · [Quick start](#quick-start) · [Tutorials](docs/tutorials/README.md)
 
-## 🚀 Downloads & Installers
+</div>
 
-Download the latest version of Octopus Studio for your platform from our **[Releases Page](https://github.com/kaleemibnanwar/OctopusStudio/releases)**:
+## Why Octopus Studio?
 
-| Platform | Download | Package Type |
-| :--- | :--- | :--- |
-| 🍏 **macOS (Apple Silicon)** | [Download for M1/M2/M3/M4](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest) | `.zip` (Universal App) |
-| 🍏 **macOS (Intel)** | [Download for Intel Mac](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest) | `.zip` (Intel x64 App) |
-| 🪟 **Windows (Installer)** | [Download Setup (.exe)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest) | Windows Setup Wizard |
-| 🪟 **Windows (Portable)** | [Download Portable (.zip)](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest) | Standalone x64 Zip |
-| 🐧 **Linux** | [Download .deb / .AppImage](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest) | Ubuntu, Debian, Fedora |
+Octopus Studio helps people move from an idea to a working project they can preview, inspect, version, connect to real services, and ship.
 
----
+- **Build from a description.** Start a project in plain language and iterate against a live preview.
+- **Bring your own model.** Connect supported cloud providers or local runtimes such as Ollama and LM Studio.
+- **Stay in control.** Review plans, file changes, terminal output, tool calls, and Git history.
+- **Work with existing projects.** Import local folders or GitHub repositories instead of starting over.
+- **Connect and automate.** Use deployment/database integrations, MCP plugins, reusable skills, and scheduled tasks.
 
-## ✨ Key Capabilities
+Octopus Studio is local-first, not offline-only. Project files and desktop data are stored locally. Cloud models and integrations receive the information needed to perform requests under their respective terms.
 
-- **Document & Spreadsheet Studio**: Google Docs/Sheets/Slides-grade interactive previews, formulas, multi-sheet workbook editors, and scaled presentation decks.
-- **Autonomous Sub-Agents**: Parallel sub-agents with visual status metrics, action trees, and token efficiency.
-- **Local File System Awareness**: Full workspace awareness with complete absolute OS path integration.
-- **Private & Secure**: Operates directly on your machine. Bring Your Own API Keys (BYOK) or connect local models (Ollama, LM Studio).
+## Download
 
----
+Download the latest available installer or archive from [GitHub Releases](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest). Open the release notes and choose the asset for your operating system and architecture.
 
-## 📄 License & Terms
+This public repository intentionally contains release information and user documentation only. It does not distribute the application source code.
 
-Octopus Studio is proprietary software. Pre-compiled binaries are provided free of charge for personal use. All rights reserved.
+## What you can do
+
+| Area                | Capabilities                                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Build               | Create projects from a prompt, use blueprints and follow-up questions, and watch a live preview.                 |
+| Import              | Open a local project, choose a connected GitHub repository, or clone from a repository URL.                      |
+| Chat modes          | Build with broad context, use Agent for tool-driven changes, Plan before implementation, or Ask without editing. |
+| Inspect and recover | Review modified files and commits, browse code, inspect logs/tests, create branches, and restore versions.       |
+| Connect services    | Integrate GitHub, Vercel, Supabase, Neon, Google Workspace, image search providers, and MCP servers.             |
+| Reuse and automate  | Save prompts and skills, schedule agent tasks, and configure model/tool limits.                                  |
+| Organize            | Manage coding projects, chat projects, collections, templates, themes, skills, and media.                        |
+
+See [Features and use cases](docs/FEATURES_AND_USE_CASES.md) for the larger product catalog.
+
+## Quick start
+
+1. Install Octopus Studio from the [latest release](https://github.com/kaleemibnanwar/OctopusStudio/releases/latest).
+2. Launch the desktop application.
+3. Open **Settings → Model Providers** and connect a supported provider or local model runtime.
+4. Select a default model under **AI**.
+5. Return home, describe the app or task you want, and submit the prompt.
+6. Review any plan, questionnaire, or requested tool approval before continuing.
+
+Start with [Install and first run](docs/tutorials/01-install-and-first-run.md), then follow [Build your first app](docs/tutorials/02-build-your-first-app.md).
+
+## Documentation
+
+The [tutorial index](docs/tutorials/README.md) includes short guides for:
+
+- model-provider setup
+- building and importing projects
+- chat modes and agent permissions
+- previews and version history
+- GitHub, Vercel, Supabase, and Neon
+- MCP plugins, skills, tasks, and Library assets
+
+## Privacy and security
+
+- Cloud model providers receive prompt content and selected context.
+- Local models can keep model inference on the user's machine.
+- Connected plugins and external services may make network requests.
+- Review tool permissions and third-party account access before approval.
+- Never commit API keys, access tokens, or `.env` secrets to a project.
+
+## Repository scope
+
+This is the public distribution and documentation repository for Octopus Studio. It contains no application source code. Release availability and individual features may vary by platform, account, provider, and application version.
