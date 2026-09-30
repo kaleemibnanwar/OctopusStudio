@@ -57,15 +57,15 @@ No single workflow has to use every arm. The point is that your next step is alr
 
 ## See it in action
 
-### Automation that returns to real projects
+### One workspace for projects, chats, tasks, and agents
 
-Save a prompt, choose its project, tools, model, and cadence, then inspect each run.
+Start research, document, automation, data, media, or development work from the same project surface.
 
 <p align="center">
-  <img src="docs/assets/screenshots/tasks.png" alt="Octopus Studio scheduled tasks" width="900" />
+  <img src="docs/assets/screenshots/workspace.png" alt="Octopus Studio project and automation workspace" width="900" />
 </p>
 
-### MCP tools without hand-editing configuration
+### MCP tools with visible controls
 
 Browse the catalog, connect trusted services, and give the agent only the tools the workflow needs.
 
@@ -73,12 +73,20 @@ Browse the catalog, connect trusted services, and give the agent only the tools 
   <img src="docs/assets/screenshots/plugins.png" alt="Octopus Studio MCP plugin catalog" width="900" />
 </p>
 
-### Multiple perspectives, one shared objective
+### Reusable skills instead of repeated instructions
 
-Dispatch role-based workers for structured review and coordinated work in a shared project.
+Save focused operating instructions for document design, spreadsheets, presentations, and repeatable workflows.
 
 <p align="center">
-  <img src="docs/assets/screenshots/workers.png" alt="Octopus Studio automated workers panel" width="900" />
+  <img src="docs/assets/screenshots/skills.png" alt="Octopus Studio reusable agent skills library" width="900" />
+</p>
+
+### Built-in media and asset workspace
+
+Search, generate, organize, and preview project media without bouncing between disconnected tools.
+
+<p align="center">
+  <img src="docs/assets/screenshots/media.png" alt="Octopus Studio in-app media library" width="900" />
 </p>
 
 ## What people can do with it
